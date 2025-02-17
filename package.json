@@ -1,5 +1,5 @@
 {
-  "name": "@blaze/sdk",
+  "name": "blaze-sdk",
   "version": "0.1.0",
   "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "main": "dist/index.js",
