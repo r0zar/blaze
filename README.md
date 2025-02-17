@@ -5,7 +5,7 @@ A lightweight SDK for managing off-chain transfers with on-chain settlement for 
 ## Installation
 
 ```bash
-npm install @blaze/sdk
+npm install blaze-sdk
 ```
 
 ## Overview
@@ -34,7 +34,7 @@ export PRIVATE_KEY=your_private_key_here
 ### Basic Usage
 
 ```typescript
-import { registerToken, addTransferToQueue, processTransfers } from '@blaze/sdk';
+import { registerToken, addTransferToQueue, processTransfers } from 'blaze-sdk';
 
 // Register a token contract
 registerToken('SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.blaze-token');
@@ -110,7 +110,7 @@ Get current status including:
 ### Basic Usage
 
 ```typescript
-import { signTransfer } from '@blaze/sdk/client';
+import { signTransfer } from 'blaze-sdk/client';
 
 // Request user to sign a transfer
 const signatureData = await signTransfer({
