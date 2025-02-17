@@ -119,6 +119,12 @@ export async function getBalance(contract: string, user: string): Promise<Balanc
     };
 }
 
+export async function updateBalance(contract: string, user: string, amount: number): Promise<void> {
+    const key = getStateKey(contract, user);
+    const currentBalance = state.unconfirmedBalances.get(key) || 0;
+    state.unconfirmedBalances.set(key, currentBalance + amount);
+}
+
 /**
  * Nonce Management
  */
