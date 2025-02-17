@@ -1,0 +1,77 @@
+{
+  "name": "@blaze/sdk",
+  "version": "0.1.0",
+  "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    },
+    "./client": {
+      "require": "./dist/client.js",
+      "import": "./dist/client.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx --no-deprecation src/cli.ts",
+    "dev:watch": "tsx watch src/cli.ts",
+    "dev:debug": "node --inspect-brk -r tsx/cjs src/cli.ts",
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "prepare": "npm run clean && npm run build",
+    "test": "vitest",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "publish:check": "git diff-index --quiet HEAD || (echo 'Working directory not clean. Please commit or stash changes first.' && exit 1)",
+    "publish:next": "npm run publish:check && npm publish --tag next && git push && git push --tags",
+    "publish:latest": "npm run publish:check && npm publish --tag next && npm dist-tag add dexterity-sdk@$(npm pkg get version | sed 's/\"//g') latest && git push && git push --tags",
+    "cli": "node --no-deprecation ./dist/cli.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "stacks",
+    "blockchain",
+    "scaling",
+    "batching",
+    "transfers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@stacks/connect": "latest",
+    "@stacks/network": "latest",
+    "@stacks/transactions": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "cross-fetch": "^4.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.1",
+    "tsup": "^8.0.2"
+  },
+  "peerDependencies": {
+    "@stacks/connect": ">=7.0.0",
+    "@stacks/network": ">=6.0.0",
+    "@stacks/transactions": ">=6.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
