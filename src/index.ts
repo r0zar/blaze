@@ -5,6 +5,8 @@ import { STACKS_MAINNET } from '@stacks/network';
  * Core types
  */
 export interface Transfer {
+    contract: string;
+    signer: string;
     to: string;
     amount: number;
     nonce: number;
@@ -131,39 +133,40 @@ export async function updateBalance(contract: string, user: string, amount: numb
 export async function getNextNonce(contract: string, user: string): Promise<number> {
     const key = getStateKey(contract, user);
 
-    // If we haven't tracked this user yet, get their current nonce from contract
     if (!state.nextNonce.has(key)) {
         const currentNonce = await getContractNonce(contract, user);
         state.nextNonce.set(key, currentNonce + 1);
-        return currentNonce + 1;
     }
+    return state.nextNonce.get(key)!
+}
 
-    // Otherwise use our tracked next nonce
-    const nextNonce = state.nextNonce.get(key)!;
-    state.nextNonce.set(key, nextNonce + 1);
-    return nextNonce;
+export function incrementNonce(contract: string, user: string): void {
+    const key = getStateKey(contract, user);
+    const currentNonce = state.nextNonce.get(key) || 0;
+    state.nextNonce.set(key, currentNonce + 1);
 }
 
 /**
  * Transfer Processing
  */
-export async function addTransferToQueue(token: string, transfer: Transfer): Promise<void> {
-    if (!state.tokens.has(token)) {
-        throw new Error(`Token ${token} not registered`);
+export async function addTransferToQueue(transfer: Transfer): Promise<void> {
+    if (!state.tokens.has(transfer.contract)) {
+        throw new Error(`Token ${transfer.contract} not registered`);
     }
 
-    // Track unconfirmed balance changes
-    const fromKey = getStateKey(token, transfer.to);
-    const toKey = getStateKey(token, transfer.to);
-
     // Update unconfirmed balances
+    const fromKey = getStateKey(transfer.contract, transfer.signer);
+    const toKey = getStateKey(transfer.contract, transfer.to);
     state.unconfirmedBalances.set(fromKey, (state.unconfirmedBalances.get(fromKey) || 0) - transfer.amount);
     state.unconfirmedBalances.set(toKey, (state.unconfirmedBalances.get(toKey) || 0) + transfer.amount);
 
     // Add to queue
-    const queue = state.queues.get(token) || [];
+    const queue = state.queues.get(transfer.contract) || [];
     queue.push(transfer);
-    state.queues.set(token, queue);
+    state.queues.set(transfer.contract, queue);
+
+    // Increment nonce
+    incrementNonce(transfer.contract, transfer.signer);
 }
 
 /**
@@ -173,45 +176,38 @@ export async function getQueueLength(token: string): Promise<number> {
     return state.queues.get(token)?.length || 0;
 }
 
-export async function getTransfersFromQueue(token: string): Promise<Transfer[]> {
-    if (!state.tokens.has(token)) {
-        throw new Error(`Token ${token} not registered`);
+export async function getTransfersFromQueue(contract: string): Promise<Transfer[]> {
+    if (!state.tokens.has(contract)) {
+        throw new Error(`Token ${contract} not registered`);
     }
-    const queue = state.queues.get(token) || [];
+    const queue = state.queues.get(contract) || [];
     return queue.slice(0, 200); // Max batch size hardcoded to 200
 }
 
-export async function removeProcessedTransfers(token: string, count: number): Promise<void> {
-    const queue = state.queues.get(token) || [];
-    state.queues.set(token, queue.slice(count));
+export async function removeProcessedTransfers(contract: string, count: number): Promise<void> {
+    const queue = state.queues.get(contract) || [];
+    state.queues.set(contract, queue.slice(count));
 }
 
 /**
  * Contract Interactions
  */
-export async function verifySignature(
-    contract: string,
-    signature: string,
-    signer: string,
-    to: string,
-    amount: number,
-    nonce: number,
-): Promise<boolean> {
-    const [contractAddress, contractName] = contract.split('.');
+export async function verifySignature(transfer: Transfer): Promise<boolean> {
+    const [contractAddress, contractName] = transfer.contract.split('.');
     try {
         const result = await fetchCallReadOnlyFunction({
             contractAddress,
             contractName,
             functionName: 'verify-signature',
             functionArgs: [
-                Cl.bufferFromHex(signature),
-                Cl.principal(signer),
-                Cl.principal(to),
-                Cl.uint(amount),
-                Cl.uint(nonce)
+                Cl.bufferFromHex(transfer.signature),
+                Cl.principal(transfer.signer),
+                Cl.principal(transfer.to),
+                Cl.uint(transfer.amount),
+                Cl.uint(transfer.nonce)
             ],
             network: STACKS_MAINNET,
-            senderAddress: signer
+            senderAddress: transfer.signer
         });
 
         return result.type === ClarityType.BoolTrue;
