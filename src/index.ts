@@ -26,12 +26,12 @@ export interface NodeStatus {
 }
 
 export class Subnet {
-    private contract: string;
-    private unconfirmedBalances: Map<string, number>;
-    private nextNonce: Map<string, number>;
-    private queue: Transfer[];
-    private isProcessing: boolean;
-    private lastProcessedBlock: number;
+    contract: string;
+    unconfirmedBalances: Map<string, number>;
+    nextNonce: Map<string, number>;
+    queue: Transfer[];
+    isProcessing: boolean;
+    lastProcessedBlock: number;
 
     constructor(contract: string) {
         if (!contract) {
