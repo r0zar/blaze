@@ -5,7 +5,6 @@ import { STACKS_MAINNET } from '@stacks/network';
  * Core types
  */
 export interface Transfer {
-    contract: string;
     signer: string;
     to: string;
     amount: number;
@@ -21,336 +20,224 @@ export interface Balance {
 
 export interface NodeStatus {
     isProcessing: boolean;
-    registeredTokens: string[];
-    queueSizes: { [token: string]: number };
+    contracts: string[];
+    queueSizes: { [contract: string]: number };
     lastProcessedBlock?: number;
 }
 
-// Global state for tracking transfers and node status
-const state = {
-    // Unconfirmed balance changes (negative values for outgoing transfers)
-    unconfirmedBalances: new Map<string, number>(),
-    // Next nonce to use per user
-    nextNonce: new Map<string, number>(),
-    // Transfer queues
-    queues: new Map<string, Transfer[]>(),
-    // Registered tokens
-    tokens: new Set<string>(),
-    // Node processing status
-    isProcessing: false,
-    // Last processed block
-    lastProcessedBlock: 0
-};
+export class Subnet {
+    private contract: string;
+    private unconfirmedBalances: Map<string, number>;
+    private nextNonce: Map<string, number>;
+    private queue: Transfer[];
+    private isProcessing: boolean;
+    private lastProcessedBlock: number;
 
-/**
- * State key helper
- */
-function getStateKey(contract: string, user: string): string {
-    return `${contract}:${user}`;
-}
-
-/**
- * Token Management
- */
-export function registerToken(tokenContract: string): void {
-    state.tokens.add(tokenContract);
-    if (!state.queues.has(tokenContract)) {
-        state.queues.set(tokenContract, []);
-    }
-}
-
-/**
- * Contract Read Methods
- */
-async function getContractBalance(contract: string, user: string): Promise<number> {
-    const [contractAddress, contractName] = contract.split('.');
-    try {
-        const result = await fetchCallReadOnlyFunction({
-            contractAddress,
-            contractName,
-            functionName: 'get-balance',
-            functionArgs: [Cl.principal(user)],
-            network: STACKS_MAINNET,
-            senderAddress: user
-        });
-
-        if (result.type === ClarityType.UInt) {
-            return Number(result);
+    constructor(contract: string) {
+        if (!contract) {
+            throw new Error('Contract address is required');
         }
-        return 0;
-    } catch (error) {
-        console.error('Failed to fetch contract balance:', error);
-        return 0;
-    }
-}
-
-async function getContractNonce(contract: string, user: string): Promise<number> {
-    const [contractAddress, contractName] = contract.split('.');
-    try {
-        const result = await fetchCallReadOnlyFunction({
-            contractAddress,
-            contractName,
-            functionName: 'get-nonce',
-            functionArgs: [Cl.principal(user)],
-            network: STACKS_MAINNET,
-            senderAddress: user
-        });
-
-        if (result.type === ClarityType.UInt) {
-            return Number(result);
-        }
-        return 0;
-    } catch (error) {
-        console.error('Failed to fetch contract nonce:', error);
-        return 0;
-    }
-}
-
-/**
- * Balance Management
- */
-export async function getBalance(contract: string, user: string): Promise<Balance> {
-    const key = getStateKey(contract, user);
-    const onChainBalance = await getContractBalance(contract, user);
-    const unconfirmedBalance = state.unconfirmedBalances.get(key) || 0;
-
-    return {
-        confirmed: onChainBalance,
-        unconfirmed: unconfirmedBalance,
-        total: onChainBalance + unconfirmedBalance
-    };
-}
-
-export async function updateBalance(contract: string, user: string, amount: number): Promise<void> {
-    const key = getStateKey(contract, user);
-    const currentBalance = state.unconfirmedBalances.get(key) || 0;
-    state.unconfirmedBalances.set(key, currentBalance + amount);
-}
-
-/**
- * Nonce Management
- */
-export async function getNextNonce(contract: string, user: string): Promise<number> {
-    const key = getStateKey(contract, user);
-
-    if (!state.nextNonce.has(key)) {
-        const currentNonce = await getContractNonce(contract, user);
-        state.nextNonce.set(key, currentNonce + 1);
-    }
-    return state.nextNonce.get(key)!
-}
-
-export function incrementNonce(contract: string, user: string): void {
-    const key = getStateKey(contract, user);
-    const currentNonce = state.nextNonce.get(key) || 0;
-    state.nextNonce.set(key, currentNonce + 1);
-}
-
-/**
- * Transfer Processing
- */
-export async function addTransferToQueue(transfer: Transfer): Promise<void> {
-    if (!state.tokens.has(transfer.contract)) {
-        throw new Error(`Token ${transfer.contract} not registered`);
+        this.contract = contract;
+        this.unconfirmedBalances = new Map();
+        this.nextNonce = new Map();
+        this.queue = [];
+        this.isProcessing = false;
+        this.lastProcessedBlock = 0;
     }
 
-    // Update unconfirmed balances
-    const fromKey = getStateKey(transfer.contract, transfer.signer);
-    const toKey = getStateKey(transfer.contract, transfer.to);
-    state.unconfirmedBalances.set(fromKey, (state.unconfirmedBalances.get(fromKey) || 0) - transfer.amount);
-    state.unconfirmedBalances.set(toKey, (state.unconfirmedBalances.get(toKey) || 0) + transfer.amount);
-
-    // Add to queue
-    const queue = state.queues.get(transfer.contract) || [];
-    queue.push(transfer);
-    state.queues.set(transfer.contract, queue);
-
-    // Increment nonce
-    incrementNonce(transfer.contract, transfer.signer);
-}
-
-/**
- * Queue Management
- */
-export async function getQueueLength(token: string): Promise<number> {
-    return state.queues.get(token)?.length || 0;
-}
-
-export async function getTransfersFromQueue(contract: string): Promise<Transfer[]> {
-    if (!state.tokens.has(contract)) {
-        throw new Error(`Token ${contract} not registered`);
-    }
-    const queue = state.queues.get(contract) || [];
-    return queue.slice(0, 200); // Max batch size hardcoded to 200
-}
-
-export async function removeProcessedTransfers(contract: string, count: number): Promise<void> {
-    const queue = state.queues.get(contract) || [];
-    state.queues.set(contract, queue.slice(count));
-}
-
-/**
- * Contract Interactions
- */
-export async function verifySignature(transfer: Transfer): Promise<boolean> {
-    const [contractAddress, contractName] = transfer.contract.split('.');
-    try {
-        const result = await fetchCallReadOnlyFunction({
-            contractAddress,
-            contractName,
-            functionName: 'verify-signature',
-            functionArgs: [
-                Cl.bufferFromHex(transfer.signature),
-                Cl.principal(transfer.signer),
-                Cl.principal(transfer.to),
-                Cl.uint(transfer.amount),
-                Cl.uint(transfer.nonce)
-            ],
-            network: STACKS_MAINNET,
-            senderAddress: transfer.signer
-        });
-
-        return result.type === ClarityType.BoolTrue;
-    } catch (error) {
-        console.error('Signature verification failed:', error);
-        return false;
-    }
-}
-
-export async function executeBatchTransfer(
-    contract: string,
-    operations: Transfer[]
-): Promise<{ txid: string; status: string }> {
-    if (!process.env.PRIVATE_KEY) {
-        throw new Error('PRIVATE_KEY environment variable not set');
+    private getStateKey(user: string): string {
+        return `${this.contract}:${user}`;
     }
 
-    const [contractAddress, contractName] = contract.split('.');
-    const clarityOperations = operations.map(op => {
-        return Cl.tuple({
-            to: Cl.principal(op.to),
-            amount: Cl.uint(op.amount),
-            nonce: Cl.uint(op.nonce),
-            signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
-        });
-    });
+    // Contract Read Methods
+    private async getContractBalance(user: string): Promise<number> {
+        const [contractAddress, contractName] = this.contract.split('.');
+        try {
+            const result = await fetchCallReadOnlyFunction({
+                contractAddress,
+                contractName,
+                functionName: 'get-balance',
+                functionArgs: [Cl.principal(user)],
+                network: STACKS_MAINNET,
+                senderAddress: user
+            });
 
-    const txOptions = {
-        contractAddress,
-        contractName,
-        functionName: 'batch-transfer',
-        functionArgs: [Cl.list(clarityOperations)],
-        senderKey: process.env.PRIVATE_KEY,
-        network: 'mainnet',
-        fee: 1800
-    };
-
-    const transaction = await makeContractCall(txOptions as any);
-    const response: TxBroadcastResult = await broadcastTransaction({
-        transaction,
-        network: 'mainnet',
-    });
-
-    if ('error' in response) {
-        throw new Error(response.error);
-    }
-
-    return {
-        txid: response.txid,
-        status: response.txid ? 'success' : 'failed'
-    };
-}
-
-/**
- * Node Status Management
- */
-export function getNodeStatus(): NodeStatus {
-    const queueSizes: { [token: string]: number } = {};
-
-    for (const token of state.tokens) {
-        queueSizes[token] = state.queues.get(token)?.length || 0;
-    }
-
-    return {
-        isProcessing: state.isProcessing,
-        registeredTokens: Array.from(state.tokens),
-        queueSizes,
-        lastProcessedBlock: state.lastProcessedBlock
-    };
-}
-
-/**
- * Enhanced Token Management
- */
-export function deregisterToken(token: string): void {
-    if (!state.tokens.has(token)) {
-        throw new Error(`Token ${token} not registered`);
-    }
-
-    if (state.isProcessing) {
-        throw new Error('Cannot deregister token while node is processing transfers');
-    }
-
-    // Clear all state for this token
-    state.tokens.delete(token);
-    state.queues.delete(token);
-
-    // Clear unconfirmed balances for this token
-    for (const [key, _] of state.unconfirmedBalances) {
-        if (key.startsWith(`${token}:`)) {
-            state.unconfirmedBalances.delete(key);
+            return result.type === ClarityType.UInt ? Number(result) : 0;
+        } catch (error) {
+            console.error('Failed to fetch contract balance:', error);
+            return 0;
         }
     }
-}
 
-export function getRegisteredTokens(): string[] {
-    return Array.from(state.tokens);
-}
+    async getContractNonce(user: string): Promise<number> {
+        const [contractAddress, contractName] = this.contract.split('.');
+        try {
+            const result = await fetchCallReadOnlyFunction({
+                contractAddress,
+                contractName,
+                functionName: 'get-nonce',
+                functionArgs: [Cl.principal(user)],
+                network: STACKS_MAINNET,
+                senderAddress: user
+            });
 
-export async function processTransfers(token: string): Promise<void> {
-    if (!state.tokens.has(token)) {
-        throw new Error(`Token ${token} not registered`);
-    }
-
-    const queueLength = await getQueueLength(token);
-    if (queueLength === 0) return;
-
-    state.isProcessing = true;
-
-    try {
-        const transfers = await getTransfersFromQueue(token);
-        if (transfers.length === 0) return;
-
-        const result = await executeBatchTransfer(token, transfers);
-        if (result.status === 'success') {
-            // Clear unconfirmed balances for processed transfers
-            for (const transfer of transfers) {
-                const fromKey = getStateKey(token, transfer.to);
-                const toKey = getStateKey(token, transfer.to);
-                state.unconfirmedBalances.delete(fromKey);
-                state.unconfirmedBalances.delete(toKey);
+            if (result.type === ClarityType.UInt) {
+                return Number(result);
             }
-
-            await removeProcessedTransfers(token, transfers.length);
+            return 0;
+        } catch (error) {
+            console.error('Failed to fetch contract nonce:', error);
+            return 0;
         }
-    } catch (err: any) {
-        // Just log the error and rethrow
-        console.error('Failed to process transfers:', err);
-        throw err;
-    } finally {
-        state.isProcessing = false;
+    }
+
+    public async getBalance(user: string): Promise<Balance> {
+        const key = this.getStateKey(user);
+        const onChainBalance = await this.getContractBalance(user);
+        const unconfirmedBalance = this.unconfirmedBalances.get(key) || 0;
+
+        return {
+            confirmed: onChainBalance,
+            unconfirmed: unconfirmedBalance,
+            total: onChainBalance + unconfirmedBalance
+        };
+    }
+
+    public async updateBalance(user: string, amount: number): Promise<void> {
+        const key = this.getStateKey(user);
+        const currentBalance = this.unconfirmedBalances.get(key) || 0;
+        this.unconfirmedBalances.set(key, currentBalance + amount);
+    }
+
+    public async getNextNonce(user: string): Promise<number> {
+        const key = this.getStateKey(user);
+
+        if (!this.nextNonce.has(key)) {
+            const currentNonce = await this.getContractNonce(user);
+            this.nextNonce.set(key, currentNonce + 1);
+        }
+        return this.nextNonce.get(key)!
+    }
+
+    public incrementNonce(user: string): void {
+        const key = this.getStateKey(user);
+        const currentNonce = this.nextNonce.get(key) || 0;
+        this.nextNonce.set(key, currentNonce + 1);
+    }
+
+    public async addTransferToQueue(transfer: Transfer): Promise<void> {
+        // Update unconfirmed balances
+        const fromKey = this.getStateKey(transfer.signer);
+        const toKey = this.getStateKey(transfer.to);
+        this.unconfirmedBalances.set(fromKey, (this.unconfirmedBalances.get(fromKey) || 0) - transfer.amount);
+        this.unconfirmedBalances.set(toKey, (this.unconfirmedBalances.get(toKey) || 0) + transfer.amount);
+
+        // Add to queue
+        this.queue.push(transfer);
+
+        // Increment nonce
+        await this.incrementNonce(transfer.signer);
+    }
+
+    public getNodeStatus(): NodeStatus {
+        return {
+            isProcessing: this.isProcessing,
+            contracts: [this.contract],
+            queueSizes: { [this.contract]: this.queue.length },
+            lastProcessedBlock: this.lastProcessedBlock
+        };
+    }
+
+    async verifySignature(transfer: Transfer): Promise<boolean> {
+        const [contractAddress, contractName] = this.contract.split('.');
+        try {
+            const result = await fetchCallReadOnlyFunction({
+                contractAddress,
+                contractName,
+                functionName: 'verify-signature',
+                functionArgs: [
+                    Cl.bufferFromHex(transfer.signature),
+                    Cl.principal(transfer.signer),
+                    Cl.principal(transfer.to),
+                    Cl.uint(transfer.amount),
+                    Cl.uint(transfer.nonce)
+                ],
+                network: STACKS_MAINNET,
+                senderAddress: transfer.signer
+            });
+
+            return result.type === ClarityType.BoolTrue;
+        } catch (error) {
+            console.error('Signature verification failed:', error);
+            return false;
+        }
+    }
+
+    async executeBatchTransfer(operations: Transfer[]): Promise<{ txid: string; status: string }> {
+        if (!process.env.PRIVATE_KEY) {
+            throw new Error('PRIVATE_KEY environment variable not set');
+        }
+
+        const clarityOperations = operations.map(op => {
+            return Cl.tuple({
+                to: Cl.principal(op.to),
+                amount: Cl.uint(op.amount),
+                nonce: Cl.uint(op.nonce),
+                signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
+            });
+        });
+
+        const txOptions = {
+            contractAddress: this.contract.split('.')[0],
+            contractName: this.contract.split('.')[1],
+            functionName: 'batch-transfer',
+            functionArgs: [Cl.list(clarityOperations)],
+            senderKey: process.env.PRIVATE_KEY,
+            network: 'mainnet',
+            fee: 1800
+        };
+
+        const transaction = await makeContractCall(txOptions as any);
+        const response: TxBroadcastResult = await broadcastTransaction({
+            transaction,
+            network: 'mainnet',
+        });
+
+        if ('error' in response) {
+            throw new Error(response.error);
+        }
+
+        return {
+            txid: response.txid,
+            status: response.txid ? 'success' : 'failed'
+        };
+    }
+
+    async processTransfers(): Promise<void> {
+        const queueLength = this.queue.length;
+        if (queueLength === 0) return;
+
+        this.isProcessing = true;
+
+        try {
+            const result = await this.executeBatchTransfer(this.queue);
+            if (result.status === 'success') {
+                // Clear unconfirmed balances for processed transfers
+                this.queue.forEach(transfer => {
+                    const fromKey = this.getStateKey(transfer.signer);
+                    const toKey = this.getStateKey(transfer.to);
+                    this.unconfirmedBalances.delete(fromKey);
+                    this.unconfirmedBalances.delete(toKey);
+                });
+
+                this.queue.splice(0, queueLength);
+            }
+        } catch (err: any) {
+            // Just log the error and rethrow
+            console.error('Failed to process transfers:', err);
+            throw err;
+        } finally {
+            this.isProcessing = false;
+        }
     }
 }
-
-/**
- * Process all registered tokens
- */
-export async function processAllTokens(): Promise<void> {
-    const promises = Array.from(state.tokens).map(token =>
-        processTransfers(token).catch(error => {
-            console.error(`Failed to process token ${token}:`, error);
-        })
-    );
-
-    await Promise.all(promises);
-} 
