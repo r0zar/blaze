@@ -14,6 +14,7 @@ export interface Transfer {
 export interface Balance {
     confirmed: number;
     unconfirmed: number;
+    total: number;
 }
 
 export interface NodeStatus {
@@ -113,7 +114,8 @@ export async function getBalance(contract: string, user: string): Promise<Balanc
 
     return {
         confirmed: onChainBalance,
-        unconfirmed: unconfirmedBalance
+        unconfirmed: unconfirmedBalance,
+        total: onChainBalance + unconfirmedBalance
     };
 }
 
