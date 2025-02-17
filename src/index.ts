@@ -114,6 +114,7 @@ export class Subnet {
 
         if (!this.nextNonce.has(key)) {
             const currentNonce = await this.getContractNonce(user);
+            console.log('currentNonce', currentNonce);
             this.nextNonce.set(key, currentNonce + 1);
         }
         return this.nextNonce.get(key)!
@@ -136,7 +137,7 @@ export class Subnet {
         this.queue.push(transfer);
 
         // Increment nonce
-        await this.incrementNonce(transfer.signer);
+        this.incrementNonce(transfer.signer);
     }
 
     public getNodeStatus(): NodeStatus {
@@ -222,14 +223,7 @@ export class Subnet {
         try {
             const result = await this.executeBatchTransfer(this.queue);
             if (result.status === 'success') {
-                // Clear unconfirmed balances for processed transfers
-                this.queue.forEach(transfer => {
-                    const fromKey = this.getStateKey(transfer.signer);
-                    const toKey = this.getStateKey(transfer.to);
-                    this.unconfirmedBalances.delete(fromKey);
-                    this.unconfirmedBalances.delete(toKey);
-                });
-
+                // Clear the queue
                 this.queue.splice(0, queueLength);
             }
         } catch (err: any) {
