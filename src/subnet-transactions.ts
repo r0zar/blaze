@@ -44,10 +44,11 @@ export function buildBatchTransferTxOptions(params: BatchTransferOptions) {
 
     const clarityOperations = operations.map(op => {
         return Cl.tuple({
+            signature: Cl.bufferFromHex(op.signature),
+            signer: Cl.principal(op.signer),
             to: Cl.principal(op.to),
             amount: Cl.uint(op.amount),
             nonce: Cl.uint(op.nonce),
-            signature: Cl.bufferFromHex(op.signature)
         });
     });
 
