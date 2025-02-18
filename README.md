@@ -10,186 +10,204 @@ npm install blaze-sdk
 
 ## Overview
 
-The Blaze SDK consists of two main parts:
-1. **Server SDK**: For managing transfer queues and processing batches
-2. **Client SDK**: For signing transfers and managing token amounts
+The Blaze SDK provides a comprehensive solution for managing token transfers on Stacks subnets, combining off-chain efficiency with on-chain security. It handles:
 
-## Server SDK
+- Off-chain transfer signing and validation
+- On-chain deposit and withdrawal operations
+- Real-time balance tracking with caching
+- Batched transfer processing for improved efficiency
+- Automatic environment detection (browser/server)
+- Structured data signing for secure transfers
 
-### Configuration
+## Guides
 
-The server requires a private key to be set as an environment variable for submitting transactions:
+- [Game Developer's Guide](docs/game-developers-guide.md) - Comprehensive guide for building games and NFT projects with Blaze SDK
+- [Subnet Registry](docs/subnet-registry.md) - List of active subnets and supported tokens
+
+## Architecture
+
+The SDK is organized into several core modules:
+
+- **Blaze Client**: Main interface for developers (`client.ts`)
+- **Subnet Management**: Handles transfer queuing and batch processing (`subnet.ts`)
+- **Balance Tracking**: Manages cached and on-chain balances (`balance.ts`)
+- **Transaction Handling**: Builds and executes transactions (`transactions.ts`, `subnet-transactions.ts`)
+- **Signature Management**: Handles structured data signing (`structured-data.ts`)
+
+## Usage
+
+### Client-Side Usage
+
+```typescript
+import { Blaze } from 'blaze-sdk';
+
+// Initialize with Welsh Token subnet (first supported token)
+const blaze = new Blaze(
+    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0',
+    'SP2MR4YP9C7P93EJZC4W1JT8HKAX8Q4HR9Q6X3S88'  // Your Stacks address
+);
+
+// Check balance (includes both confirmed and unconfirmed)
+const balance = await blaze.getBalance();
+console.log('Balance:', balance);
+
+// Make a transfer (automatically uses @stacks/connect in browser)
+await blaze.transfer({
+    to: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS',  // Recipient address
+    amount: 1000000 // amount in microtokens (1 WELSH)
+});
+
+// Deposit tokens to subnet
+await blaze.deposit(1000000);  // 1 WELSH
+
+// Withdraw tokens from subnet
+await blaze.withdraw(1000000);  // 1 WELSH
+```
+
+### Server-Side Usage
+
+For server-side operations, set your private key as an environment variable:
 
 ```bash
 export PRIVATE_KEY=your_private_key_here
 ```
 
-### Core Concepts
-
-- **Tokens**: Register token contracts you want to manage transfers for
-- **Transfers**: Off-chain signed transfers that can be batched together
-- **Batching**: Combine up to 200 transfers into a single transaction
-- **Balance Tracking**: Track both confirmed (on-chain) and unconfirmed (pending) balances
-
-### Basic Usage
+Then use the same API as client-side, but in a Node.js environment:
 
 ```typescript
-import { registerToken, addTransferToQueue, processTransfers } from 'blaze-sdk';
+import { Blaze } from 'blaze-sdk';
 
-// Register a token contract
-registerToken('SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.blaze-token');
-
-// Queue a transfer for later processing
-await addTransferToQueue('SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.blaze-token', {
-    to: 'ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG',
-    amount: 1000000, // amount in microtokens
-    nonce: 1,
-    signature: '0x...'
-});
-
-// Process queued transfers when ready
-await processTransfers('SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.blaze-token');
+// Initialize with Welsh Token subnet for server operations
+const blaze = new Blaze(
+    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0',
+    'SP2MR4YP9C7P93EJZC4W1JT8HKAX8Q4HR9Q6X3S88'  // Your server's Stacks address
+);
+// The SDK will automatically detect server environment and use the private key
 ```
 
-### Server API Reference
+## API Reference
 
-#### Token Management
+### `Blaze` Class
 
+#### Constructor
 ```typescript
-registerToken(tokenContract: string): void
+new Blaze(subnet: string, signer: string)
 ```
-Register a token contract to manage transfers for.
+- `subnet`: The contract address of the subnet
+- `signer`: The Stacks address of the signer
 
+#### Methods
+
+##### `getBalance()`
+Returns the current balance for the signer in the subnet, including both confirmed (on-chain) and unconfirmed (pending) amounts.
+
+Returns: `Promise<Balance>`
 ```typescript
-deregisterToken(token: string): void
-```
-Remove a token contract and clear its state.
-
-```typescript
-getRegisteredTokens(): string[]
-```
-Get list of registered token contracts.
-
-#### Balance Management
-
-```typescript
-getBalance(contract: string, user: string): Promise<Balance>
-```
-Get a user's balance including both confirmed (on-chain) and unconfirmed (pending) amounts.
-
-#### Transfer Management
-
-```typescript
-addTransferToQueue(token: string, transfer: Transfer): Promise<void>
-```
-Queue a signed transfer for later processing.
-
-```typescript
-processTransfers(token: string): Promise<void>
-```
-Process all queued transfers for a token into a single transaction.
-
-```typescript
-processAllTokens(): Promise<void>
-```
-Process queued transfers for all registered tokens.
-
-#### Status
-
-```typescript
-getStatus(): Status
-```
-Get current status including:
-- Processing state
-- Registered tokens
-- Queue sizes
-- Last processed block
-
-## Client SDK
-
-### Basic Usage
-
-```typescript
-import { signTransfer } from 'blaze-sdk/client';
-
-// Request user to sign a transfer
-const signatureData = await signTransfer({
-    from: userAddress,
-    to: recipientAddress,
-    amount: 100 // in microtokens
-});
-
-// Send to your backend
-await fetch('/api/transfer', {
-    method: 'POST',
-    body: JSON.stringify({
-        to: recipientAddress,
-        amount: amount,
-        signature: signatureData.signature
-    })
-});
-```
-
-### Client API Reference
-
-```typescript
-signTransfer(options: SignTransferOptions): Promise<SignTransferResult>
-```
-Request user to sign a transfer using their Stacks wallet. Handles conversion to microtokens automatically.
-
-## Types
-
-### Server Types
-
-```typescript
-interface Transfer {
-    to: string;        // Recipient address
-    amount: number;    // Amount in microtokens
-    nonce: number;     // Transaction nonce
-    signature: string; // Signed transfer data
-}
-
 interface Balance {
     confirmed: number;   // On-chain balance in microtokens
     unconfirmed: number; // Pending balance changes in microtokens
 }
-
-interface Status {
-    isProcessing: boolean;
-    registeredTokens: string[];
-    queueSizes: { [token: string]: number };
-    lastProcessedBlock?: number;
-}
 ```
 
-### Client Types
+##### `transfer(options: TransferOptions)`
+Initiates an off-chain transfer within the subnet. The transfer is signed and queued for batch processing.
 
+Parameters:
 ```typescript
-interface SignTransferOptions {
-    signer: string;
-    to: string;
-    amount?: number;
-    nonce?: number;
-}
-
-interface SignTransferResult {
-    signature: string;
-    publicKey: string;
+interface TransferOptions {
+    to: string;    // Recipient address
+    amount: number; // Amount in microtokens
 }
 ```
+
+##### `deposit(amount: number)`
+Deposits tokens from the main chain to the subnet. This is an on-chain operation.
+
+Parameters:
+- `amount`: Amount in microtokens to deposit
+
+##### `withdraw(amount: number)`
+Withdraws tokens from the subnet to the main chain. This is an on-chain operation.
+
+Parameters:
+- `amount`: Amount in microtokens to withdraw
+
+## Technical Details
+
+### Transfer Workflow
+
+1. **Initiation**: User initiates transfer through Blaze client
+2. **Signing**: 
+   - Browser: Uses @stacks/connect for user signature
+   - Server: Uses private key from environment
+3. **Queue Processing**: Transfers are queued for batch processing
+4. **Batch Settlement**: Multiple transfers are combined into single on-chain transaction
+5. **Balance Updates**: Both cached and on-chain balances are updated
+
+### Transaction Types
+
+1. **Single Transfers**: 
+   - Direct on-chain transactions
+   - Used for deposits and withdrawals
+2. **Batch Transfers**: 
+   - Combines multiple transfers
+   - More gas efficient
+   - Handles up to 200 transfers per batch
+
+### Balance Management
+
+- Uses Vercel KV for balance caching
+- Tracks both confirmed and unconfirmed balances
+- Processes chainhook events for balance updates
+- Automatic synchronization with on-chain state
+
+### Environment Detection
+
+The SDK automatically detects the runtime environment:
+- **Browser**: 
+  - Uses @stacks/connect for user interactions
+  - Handles wallet connections
+  - Manages signature requests
+- **Server**: 
+  - Uses private key for signing
+  - Automated transaction execution
+  - No user interaction required
+
+### Network Configuration
+
+Currently supports:
+- Network: Stacks Mainnet
+- Default fee: 1800 microstacks
+- Batch size: Up to 200 transfers
+
+## Dependencies
+
+Core dependencies:
+- @stacks/connect: ^7.0.2 (wallet integration)
+- @stacks/network: ^7.0.2 (network operations)
+- @stacks/transactions: ^7.0.2 (transaction building)
+- @vercel/kv: ^3.0.0 (balance caching)
+- axios: ^1.7.9 (API communication)
 
 ## Best Practices
 
-1. Always verify transfer signatures before queueing
-2. Monitor transfer status
-3. Handle errors appropriately in your application
-4. Keep private key secure
-5. Register tokens before attempting to process transfers
-6. Choose appropriate times to process transfers (e.g., when queue reaches certain size)
+1. Always check balances before transfers
+2. Handle transaction errors appropriately
+3. Keep private keys secure in server environments
+4. Use appropriate error handling for user interactions
+5. Monitor transaction status after broadcast
+6. Implement proper nonce management
+7. Consider batch size for optimal gas efficiency
 
 ## Limitations
 
+- Mainnet only (no testnet support currently)
+- Single subnet per instance
+- Requires environment-specific setup (browser vs server)
+- Transaction fees are fixed at 1800 microstacks
 - Maximum 200 transfers per batch
-- Mainnet only
-- In-memory state (clears on restart)
-- Single instance state tracking
+- Requires Vercel KV for balance caching
+
+## License
+
+MIT
