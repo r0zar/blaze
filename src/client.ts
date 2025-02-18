@@ -79,7 +79,7 @@ export class Blaze {
 
         const domain = createBlazeDomain();
         const message = createBlazeMessage({
-            token: this.tokenIdentifier.split('.')[0],
+            token: this.tokenIdentifier.split('::')[0],
             to: options.to,
             amount: tokens,
             nonce: nextNonce
