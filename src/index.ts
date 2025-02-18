@@ -108,6 +108,7 @@ export class Subnet {
             return Cl.tuple({
                 to: Cl.principal(op.to),
                 amount: Cl.uint(op.amount),
+                nonce: Cl.uint(op.nonce),
                 signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
             });
         });
