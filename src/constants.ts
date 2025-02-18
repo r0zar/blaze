@@ -3,4 +3,4 @@ export const SUBNETS = {
         'SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token::welshcorgicoin'
 } as const;
 
-export const NODE_URL = 'https://charisma.rocks/api/v0/blaze/'; 
+export const NODE_URL = '/api/v0/blaze/'; 
