@@ -2,8 +2,7 @@ import { Cl, Pc, PostConditionMode, makeContractCall, broadcastTransaction, TxBr
 import { STACKS_MAINNET } from '@stacks/network';
 import { Balance } from '.';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
-
-const NODE_URL = 'https://charisma.rocks/api/v0/blaze/';
+import { NODE_URL, SUBNETS } from './constants';
 
 export interface TransferOptions {
     to: string;
@@ -195,9 +194,3 @@ export class Blaze {
         return { txid: result.txId };
     }
 }
-
-// Keep SUBNETS mapping at the bottom
-const SUBNETS = {
-    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-test-2':
-        'SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token::welshcorgicoin'
-};

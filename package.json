@@ -1,6 +1,6 @@
 {
   "name": "blaze-sdk",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -8,11 +8,8 @@
   "exports": {
     ".": {
       "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
-    },
-    "./client": {
-      "require": "./dist/client.js",
-      "import": "./dist/client.mjs"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
     }
   },
   "files": [
