@@ -53,7 +53,7 @@ describe('Subnet Transaction Utilities', () => {
     });
 
     describe('buildBatchTransferTxOptions', () => {
-        const validContract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-test-2';
+        const validContract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0';
         const validPrivateKey = '1234567890abcdef';
 
         it('should build valid transaction options', () => {
@@ -65,7 +65,7 @@ describe('Subnet Transaction Utilities', () => {
 
             expect(result).toEqual({
                 contractAddress: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS',
-                contractName: 'blaze-test-2',
+                contractName: 'blaze-welsh-v0',
                 functionName: 'batch-transfer',
                 functionArgs: expect.any(Array),
                 senderKey: validPrivateKey,
