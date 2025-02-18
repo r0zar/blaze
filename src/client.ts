@@ -21,6 +21,8 @@ export interface TransactionResult {
 export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
+    private contractPrincipal: string;
+    private tokenName: string;
     private signer: string;
     isServer: boolean;
 
@@ -34,11 +36,12 @@ export class Blaze {
         this.subnet = subnet;
 
         // Get token identifier from SUBNETS mapping
-        const tokenId = SUBNETS[subnet as keyof typeof SUBNETS];
-        if (!tokenId) {
+        this.tokenIdentifier = SUBNETS[subnet as keyof typeof SUBNETS];
+        if (!this.tokenIdentifier) {
             throw new Error(`No token identifier found for subnet: ${subnet}`);
         }
-        this.tokenIdentifier = tokenId;
+        this.contractPrincipal = this.tokenIdentifier.split('::')[0];
+        this.tokenName = this.tokenIdentifier.split('.')[1];
     }
 
     private async executeServerTransaction(txOptions: any): Promise<TransactionResult> {
@@ -79,7 +82,7 @@ export class Blaze {
 
         const domain = createBlazeDomain();
         const message = createBlazeMessage({
-            token: this.tokenIdentifier.split('::')[0],
+            token: this.contractPrincipal,
             to: options.to,
             amount: tokens,
             nonce: nextNonce
