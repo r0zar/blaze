@@ -21,8 +21,8 @@ The Blaze SDK provides a comprehensive solution for managing token transfers on 
 
 ## Guides
 
-- [Game Developer's Guide](docs/game-developers-guide.md) - Comprehensive guide for building games and NFT projects with Blaze SDK
-- [Subnet Registry](docs/subnet-registry.md) - List of active subnets and supported tokens
+- [Game Developer's Guide](https://github.com/r0zar/blaze/blob/main/docs/game-developers-guide.md) - Comprehensive guide for building games and NFT projects with Blaze SDK
+- [Subnet Registry](https://github.com/r0zar/blaze/blob/main/docs/subnet-registry.md) - List of active subnets and supported tokens
 
 ## Architecture
 
