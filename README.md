@@ -114,7 +114,6 @@ import { signTransfer } from 'blaze-sdk/client';
 
 // Request user to sign a transfer
 const signatureData = await signTransfer({
-    token: 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.blaze-token',
     from: userAddress,
     to: recipientAddress,
     amount: 100 // in microtokens
@@ -167,8 +166,7 @@ interface Status {
 
 ```typescript
 interface SignTransferOptions {
-    token: string;
-    from: string;
+    signer: string;
     to: string;
     amount?: number;
     nonce?: number;

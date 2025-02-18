@@ -2,18 +2,18 @@ import { fetchCallReadOnlyFunction, Cl, ClarityType, signStructuredData } from '
 import { STACKS_MAINNET } from '@stacks/network';
 import { getFullBalance, updateUnconfirmedBalance } from './balance';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
-import { executeBatchTransfer, BatchTransferResult } from './subnet-transactions';
+import { executeBatchTransfer, executeTransfer, TransferResult } from './subnet-transactions';
 import 'dotenv/config';
 
 /**
  * Core types
  */
 export interface Transfer {
+    signature: string;
     signer: string;
     to: string;
     amount: number;
     nonce: number;
-    signature: string;
 }
 
 export interface Balance {
@@ -105,7 +105,25 @@ export class Subnet {
         }
     }
 
-    async processTransfers(): Promise<BatchTransferResult | void> {
+    async executeTransfer(transfer: Transfer): Promise<TransferResult> {
+        if (!process.env.PRIVATE_KEY) {
+            throw new Error('PRIVATE_KEY environment variable not set');
+        }
+
+        // Verify signature before executing
+        const isValid = await this.verifySignature(transfer);
+        if (!isValid) {
+            throw new Error('Invalid signature');
+        }
+
+        return executeTransfer({
+            contract: this.contract,
+            operation: transfer,
+            privateKey: process.env.PRIVATE_KEY
+        });
+    }
+
+    async processTransfers(): Promise<TransferResult | void> {
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
@@ -128,7 +146,7 @@ export class Subnet {
         return result;
     }
 
-    signTransfer(token: string, to: string, amount: number, nonce: number) {
+    signTransfer(to: string, amount: number, nonce: number) {
         const domain = createBlazeDomain();
         const message = createBlazeMessage({ to, amount, nonce });
         return signStructuredData({ message, domain, privateKey: process.env.PRIVATE_KEY! });
