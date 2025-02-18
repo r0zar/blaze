@@ -16,7 +16,7 @@ export interface TransactionResult {
     txid: string;
 }
 
-axios.defaults.headers.common['Content-Type'] = 'application/json';
+// axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 export class Blaze {
     private subnet: string;
@@ -79,7 +79,7 @@ export class Blaze {
 
         const domain = createBlazeDomain();
         const message = createBlazeMessage({
-            token: this.tokenIdentifier,
+            token: this.tokenIdentifier.split('.')[0],
             to: options.to,
             amount: tokens,
             nonce: nextNonce
