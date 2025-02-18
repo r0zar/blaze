@@ -3,6 +3,7 @@ import { STACKS_MAINNET } from '@stacks/network';
 import { Balance } from '.';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
 import { NODE_URL, SUBNETS } from './constants';
+import { buildDepositTxOptions, buildWithdrawTxOptions } from './transactions';
 
 export interface TransferOptions {
     to: string;
@@ -52,10 +53,7 @@ export class Blaze {
             network: STACKS_MAINNET,
         });
 
-        if ('error' in response) {
-            throw new Error(response.error);
-        }
-
+        if ('error' in response) throw new Error(response.error);
         return { txid: response.txid };
     }
 
@@ -99,9 +97,7 @@ export class Blaze {
                 });
             });
 
-            if (!result?.signature) {
-                throw new Error('User cancelled or signing failed');
-            }
+            if (!result?.signature) throw new Error('User cancelled or signing failed');
             signature = result.signature;
         }
 
@@ -117,27 +113,18 @@ export class Blaze {
             })
         });
 
-        if (!response.ok) {
-            console.error(response);
-            throw new Error(`Transfer failed: ${response.statusText}`);
-        }
-
+        if (!response.ok) throw new Error(`Transfer failed: ${response.statusText}`)
         const data = await response.json();
         return data;
     }
 
     async deposit(amount: number): Promise<TransactionResult> {
-        const [contractAddress, contractName] = this.subnet.split('.');
-        const [contract, name] = this.tokenIdentifier.split('::');
-
-        const txOptions = {
-            contractAddress,
-            contractName,
-            functionName: "deposit",
-            functionArgs: [Cl.uint(amount)],
-            postConditions: [Pc.principal(this.signer).willSendEq(amount).ft(contract as any, name)],
-            postConditionMode: PostConditionMode.Deny,
-        };
+        const txOptions = buildDepositTxOptions({
+            subnet: this.subnet,
+            tokenIdentifier: this.tokenIdentifier,
+            signer: this.signer,
+            amount
+        });
 
         if (this.isServer) {
             return this.executeServerTransaction(txOptions);
@@ -153,25 +140,16 @@ export class Blaze {
             });
         });
 
-        if (!result?.txId) {
-            throw new Error('Transaction cancelled or failed');
-        }
-
+        if (!result?.txId) throw new Error('Transaction cancelled or failed');
         return { txid: result.txId };
     }
 
     async withdraw(amount: number): Promise<TransactionResult> {
-        const [contractAddress, contractName] = this.subnet.split('.');
-        const [contract, name] = this.tokenIdentifier.split('::');
-
-        const txOptions = {
-            contractAddress,
-            contractName,
-            functionName: "withdraw",
-            functionArgs: [Cl.uint(amount)],
-            postConditions: [Pc.principal(contract).willSendEq(amount).ft(contract as any, name)],
-            postConditionMode: PostConditionMode.Deny,
-        };
+        const txOptions = buildWithdrawTxOptions({
+            subnet: this.subnet,
+            tokenIdentifier: this.tokenIdentifier,
+            amount
+        });
 
         if (this.isServer) {
             return this.executeServerTransaction(txOptions);
@@ -187,10 +165,7 @@ export class Blaze {
             });
         });
 
-        if (!result?.txId) {
-            throw new Error('Transaction cancelled or failed');
-        }
-
+        if (!result?.txId) throw new Error('Transaction cancelled or failed');
         return { txid: result.txId };
     }
 }

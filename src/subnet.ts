@@ -1,7 +1,8 @@
-import { makeContractCall, broadcastTransaction, Cl, TxBroadcastResult, fetchCallReadOnlyFunction, ClarityType, signStructuredData } from '@stacks/transactions';
+import { fetchCallReadOnlyFunction, Cl, ClarityType, signStructuredData } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 import { getFullBalance, updateUnconfirmedBalance } from './balance';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
+import { executeBatchTransfer, BatchTransferResult } from './subnet-transactions';
 import 'dotenv/config';
 
 /**
@@ -22,7 +23,6 @@ export interface Balance {
 }
 
 export interface Status {
-    isProcessing: boolean;
     contracts: string[];
     queueSizes: { [contract: string]: number };
     lastProcessedBlock?: number;
@@ -31,7 +31,6 @@ export interface Status {
 export class Subnet {
     contract: string;
     queue: Transfer[];
-    isProcessing: boolean;
     lastProcessedBlock: number;
 
     constructor(contract: string) {
@@ -40,8 +39,15 @@ export class Subnet {
         }
         this.contract = contract;
         this.queue = [];
-        this.isProcessing = false;
         this.lastProcessedBlock = 0;
+    }
+
+    public getStatus(): Status {
+        return {
+            contracts: [this.contract],
+            queueSizes: { [this.contract]: this.queue.length },
+            lastProcessedBlock: this.lastProcessedBlock
+        };
     }
 
     public async getBalance(user: string): Promise<Balance> {
@@ -74,15 +80,6 @@ export class Subnet {
         console.log('Added transfer to queue:', transfer);
     }
 
-    public getStatus(): Status {
-        return {
-            isProcessing: this.isProcessing,
-            contracts: [this.contract],
-            queueSizes: { [this.contract]: this.queue.length },
-            lastProcessedBlock: this.lastProcessedBlock
-        };
-    }
-
     async verifySignature(transfer: Transfer): Promise<boolean> {
         const [contractAddress, contractName] = this.contract.split('.');
         try {
@@ -108,69 +105,24 @@ export class Subnet {
         }
     }
 
-    async executeBatchTransfer(operations: Transfer[]): Promise<any> {
+    async processTransfers(): Promise<BatchTransferResult | void> {
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
 
-        const clarityOperations = operations.map(op => {
-            return Cl.tuple({
-                to: Cl.principal(op.to),
-                amount: Cl.uint(op.amount),
-                nonce: Cl.uint(op.nonce),
-                signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
-            });
-        });
-
-        const txOptions = {
-            contractAddress: this.contract.split('.')[0],
-            contractName: this.contract.split('.')[1],
-            functionName: 'batch-transfer',
-            functionArgs: [Cl.list(clarityOperations)],
-            senderKey: process.env.PRIVATE_KEY,
-            network: STACKS_MAINNET,
-            fee: 1800
-        };
-
-        const transaction = await makeContractCall(txOptions as any);
-        console.log('Transaction:', transaction);
-
-        const response: TxBroadcastResult = await broadcastTransaction({
-            transaction,
-            network: STACKS_MAINNET,
-        });
-        console.log('Response:', response);
-
-        if ('error' in response) {
-            throw new Error(response.error);
-        }
-
-        console.log('Batch transfer broadcasted:', response);
-        return {
-            txid: response.txid,
-            status: response.txid ? 'success' : 'failed'
-        };
-    }
-
-    async processTransfers(): Promise<any> {
         const queueLength = this.queue.length;
         if (queueLength === 0) return;
 
         console.log('Processing transfers:', queueLength);
 
-        this.isProcessing = true;
-        let result: any;
-        try {
-            result = await this.executeBatchTransfer(this.queue);
-            if (result.status === 'success') {
-                // Clear the queue - balances will be updated by chainhooks
-                this.queue.splice(0, queueLength);
-            }
-        } catch (err: any) {
-            console.error('Failed to process transfers:', err);
-            throw err;
-        } finally {
-            this.isProcessing = false;
+        const result = await executeBatchTransfer({
+            contract: this.contract,
+            operations: this.queue,
+            privateKey: process.env.PRIVATE_KEY
+        });
+
+        if (result.status === 'success') {
+            this.queue.splice(0, queueLength);
         }
 
         return result;

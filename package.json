@@ -1,6 +1,6 @@
 {
   "name": "blaze-sdk",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -27,7 +27,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npm run test",
     "publish:check": "git diff-index --quiet HEAD || (echo 'Working directory not clean. Please commit or stash changes first.' && exit 1)",
     "publish:next": "npm run publish:check && npm publish --tag next && git push && git push --tags",
     "publish:latest": "npm run publish:check && npm publish --tag next && npm dist-tag add dexterity-sdk@$(npm pkg get version | sed 's/\"//g') latest && git push && git push --tags",
