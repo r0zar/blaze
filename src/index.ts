@@ -61,32 +61,9 @@ export class Subnet {
                 network: STACKS_MAINNET,
                 senderAddress: user
             });
-
-            return result.type === ClarityType.UInt ? Number(result) : 0;
+            return result.type === ClarityType.UInt ? Number(result.value) : 0;
         } catch (error) {
             console.error('Failed to fetch contract balance:', error);
-            return 0;
-        }
-    }
-
-    async getContractNonce(user: string): Promise<number> {
-        const [contractAddress, contractName] = this.contract.split('.');
-        try {
-            const result = await fetchCallReadOnlyFunction({
-                contractAddress,
-                contractName,
-                functionName: 'get-nonce',
-                functionArgs: [Cl.principal(user)],
-                network: STACKS_MAINNET,
-                senderAddress: user
-            });
-
-            if (result.type === ClarityType.UInt) {
-                return Number(result);
-            }
-            return 0;
-        } catch (error) {
-            console.error('Failed to fetch contract nonce:', error);
             return 0;
         }
     }
@@ -95,7 +72,6 @@ export class Subnet {
         const key = this.getStateKey(user);
         const onChainBalance = await this.getContractBalance(user);
         const unconfirmedBalance = this.unconfirmedBalances.get(key) || 0;
-
         return {
             confirmed: onChainBalance,
             unconfirmed: unconfirmedBalance,
@@ -109,34 +85,14 @@ export class Subnet {
         this.unconfirmedBalances.set(key, currentBalance + amount);
     }
 
-    public async getNextNonce(user: string): Promise<number> {
-        const key = this.getStateKey(user);
-
-        if (!this.nextNonce.has(key)) {
-            const currentNonce = await this.getContractNonce(user);
-            this.nextNonce.set(key, currentNonce + 1);
-        }
-        return this.nextNonce.get(key)!
-    }
-
-    public incrementNonce(user: string): void {
-        const key = this.getStateKey(user);
-        const currentNonce = this.nextNonce.get(key) || 0;
-        this.nextNonce.set(key, currentNonce + 1);
-    }
-
     public async addTransferToQueue(transfer: Transfer): Promise<void> {
         // Update unconfirmed balances
         const fromKey = this.getStateKey(transfer.signer);
         const toKey = this.getStateKey(transfer.to);
         this.unconfirmedBalances.set(fromKey, (this.unconfirmedBalances.get(fromKey) || 0) - transfer.amount);
         this.unconfirmedBalances.set(toKey, (this.unconfirmedBalances.get(toKey) || 0) + transfer.amount);
-
         // Add to queue
         this.queue.push(transfer);
-
-        // Increment nonce
-        this.incrementNonce(transfer.signer);
     }
 
     public getNodeStatus(): NodeStatus {

@@ -31,7 +31,7 @@ export class Blaze {
     }
 
     async getBalance() {
-        const response = await fetch(`${NODE_URL}/balances/${this.signer}`);
+        const response = await fetch(`${NODE_URL}/subnets/${this.subnet}/balances/${this.signer}`);
         const data = await response.json();
         return data as Balance;
     }
