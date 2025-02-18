@@ -12,7 +12,7 @@ This document lists all active subnets on Stacks mainnet that are compatible wit
 - **Status**: Active
 - **Description**: The first token to use Blaze subnets for high-performance transfers
 - **Website**: [welsh-token.xyz](https://welsh-token.xyz)
-- **Explorer**: [https://kraxel.io/token/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token](https://kraxel.io/token/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token)
+- **Explorer**: [https://explorer.hiro.so/txid/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token?chain=mainnet](https://explorer.hiro.so/txid/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token?chain=mainnet)
 
 ### Charisma Token (CHA) - Coming Soon
 
