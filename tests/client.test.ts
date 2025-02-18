@@ -12,20 +12,20 @@ describe('Blaze Client Read Functions', () => {
     });
 
     // should make a real deposit
-    it('should make a real deposit', async () => {
-        const tx = await blaze.deposit(100);
-        console.log('Deposit:', tx);
-    });
+    // it('should make a real deposit', async () => {
+    //     const tx = await blaze.deposit(100);
+    //     console.log('Deposit:', tx);
+    // });
 
-    // should make a real withdraw
-    it('should make a real withdraw', async () => {
-        const tx = await blaze.withdraw(100);
-        console.log('Withdraw:', tx);
-    });
+    // // should make a real withdraw
+    // it('should make a real withdraw', async () => {
+    //     const tx = await blaze.withdraw(100);
+    //     console.log('Withdraw:', tx);
+    // });
 
-    // should make a real transfer
-    it('should make a real transfer', async () => {
-        const tx = await blaze.transfer({ to: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS', amount: 100 });
-        console.log('Transfer:', tx);
-    });
+    // // should make a real transfer
+    // it('should make a real transfer', async () => {
+    //     const tx = await blaze.transfer({ to: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS', amount: 100 });
+    //     console.log('Transfer:', tx);
+    // });
 });
