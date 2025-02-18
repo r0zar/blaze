@@ -1,10 +1,11 @@
-import { Cl, Pc, PostConditionMode, makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData } from '@stacks/transactions';
+import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 import { Balance } from '.';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
 import { NODE_URL, SUBNETS } from './constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from './transactions';
 import type { FinishedTxData } from './types';
+import axios from 'axios';
 
 export interface TransferOptions {
     to: string;
@@ -59,9 +60,8 @@ export class Blaze {
     }
 
     async getBalance() {
-        const response = await fetch(`${NODE_URL}/subnets/${this.subnet}/balances/${this.signer}`);
-        const data = await response.json();
-        return data as Balance;
+        const response = await axios.get(`${NODE_URL}/subnets/${this.subnet}/balances/${this.signer}`);
+        return response.data as Balance;
     }
 
     private async signServerTransfer(message: any, domain: any): Promise<string> {
@@ -103,22 +103,18 @@ export class Blaze {
         }
 
         // send signature to the node for processing
-        const response = await fetch(`${NODE_URL}/subnets/${this.subnet}/xfer`, {
-            method: 'POST',
-            body: JSON.stringify({
-                signature,
-                signer: this.signer,
-                to: options.to,
-                amount: tokens,
-                nonce: nextNonce,
-            })
+        const response = await axios.post(`${NODE_URL}/subnets/${this.subnet}/xfer`, {
+            signature,
+            signer: this.signer,
+            to: options.to,
+            amount: tokens,
+            nonce: nextNonce,
         });
 
-        if (!response.ok) {
+        if (response.status !== 200) {
             console.error(`Transfer failed: ${response.statusText}`);
         }
-        const data = await response.json();
-        return data;
+        return response.data;
     }
 
     async deposit(amount: number) {

@@ -1,6 +1,6 @@
 {
   "name": "blaze-sdk",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -48,6 +48,7 @@
     "@stacks/network": "^7.0.2",
     "@stacks/transactions": "^7.0.2",
     "@vercel/kv": "^3.0.0",
+    "axios": "^1.7.9",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
