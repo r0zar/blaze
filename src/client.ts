@@ -4,6 +4,7 @@ import { Balance } from '.';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
 import { NODE_URL, SUBNETS } from './constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from './transactions';
+import type { FinishedTxData } from './types';
 
 export interface TransferOptions {
     to: string;
@@ -18,7 +19,7 @@ export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
     private signer: string;
-    private isServer: boolean;
+    isServer: boolean;
 
     constructor(subnet: string, signer: string) {
         this.signer = signer;
@@ -131,8 +132,7 @@ export class Blaze {
         }
 
         const { showContractCall } = await import("@stacks/connect");
-        const result: any = await new Promise((resolve) => {
-            console.log('txOptions', txOptions);
+        const result = await new Promise<FinishedTxData | null>((resolve) => {
             showContractCall({
                 ...txOptions,
                 network: STACKS_MAINNET,
@@ -156,9 +156,9 @@ export class Blaze {
             return this.executeServerTransaction(txOptions);
         }
 
-        const { openContractCall } = await import("@stacks/connect");
-        const result: any = await new Promise((resolve) => {
-            openContractCall({
+        const { showContractCall } = await import("@stacks/connect");
+        const result = await new Promise<FinishedTxData | null>((resolve) => {
+            showContractCall({
                 ...txOptions,
                 network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
