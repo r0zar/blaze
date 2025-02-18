@@ -103,7 +103,7 @@ export class Blaze {
         }
 
         // send signature to the node for processing
-        const response = await fetch(`${NODE_URL}/xfer`, {
+        const response = await fetch(`${NODE_URL}/subnets/${this.subnet}/xfer`, {
             method: 'POST',
             body: JSON.stringify({
                 signature,
@@ -114,12 +114,14 @@ export class Blaze {
             })
         });
 
-        if (!response.ok) throw new Error(`Transfer failed: ${response.statusText}`)
+        if (!response.ok) {
+            console.error(`Transfer failed: ${response.statusText}`);
+        }
         const data = await response.json();
         return data;
     }
 
-    async deposit(amount: number): Promise<TransactionResult> {
+    async deposit(amount: number) {
         const txOptions = buildDepositTxOptions({
             subnet: this.subnet,
             tokenIdentifier: this.tokenIdentifier,
@@ -141,11 +143,14 @@ export class Blaze {
             });
         });
 
-        if (!result?.txId) throw new Error('Transaction cancelled or failed');
-        return { txid: result.txId };
+
+        if (!result?.txId) {
+            console.error('Transaction cancelled or failed');
+        }
+        return result;
     }
 
-    async withdraw(amount: number): Promise<TransactionResult> {
+    async withdraw(amount: number) {
         const txOptions = buildWithdrawTxOptions({
             subnet: this.subnet,
             tokenIdentifier: this.tokenIdentifier,
@@ -166,7 +171,9 @@ export class Blaze {
             });
         });
 
-        if (!result?.txId) throw new Error('Transaction cancelled or failed');
-        return { txid: result.txId };
+        if (!result?.txId) {
+            console.error('Transaction cancelled or failed');
+        }
+        return result;
     }
 }
