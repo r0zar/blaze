@@ -116,6 +116,20 @@ export class Subnet {
             throw new Error('Invalid signature');
         }
 
+        // Update unconfirmed balances
+        await Promise.all([
+            updateUnconfirmedBalance(
+                this.contract,
+                transfer.signer,
+                -transfer.amount
+            ),
+            updateUnconfirmedBalance(
+                this.contract,
+                transfer.to,
+                transfer.amount
+            )
+        ]);
+
         return executeTransfer({
             contract: this.contract,
             operation: transfer,
