@@ -16,6 +16,8 @@ export interface TransactionResult {
     txid: string;
 }
 
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
 export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
