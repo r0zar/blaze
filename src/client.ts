@@ -130,10 +130,10 @@ export class Blaze {
             return this.executeServerTransaction(txOptions);
         }
 
-        const { openContractCall } = await import("@stacks/connect");
+        const { showContractCall } = await import("@stacks/connect");
         const result: any = await new Promise((resolve) => {
             console.log('txOptions', txOptions);
-            openContractCall({
+            showContractCall({
                 ...txOptions,
                 network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
