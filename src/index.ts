@@ -128,20 +128,21 @@ export class Subnet {
             functionName: 'batch-transfer',
             functionArgs: [Cl.list(clarityOperations)],
             senderKey: process.env.PRIVATE_KEY,
-            network: 'mainnet',
+            network: STACKS_MAINNET,
             fee: 1800
         };
 
         const transaction = await makeContractCall(txOptions as any);
         const response: TxBroadcastResult = await broadcastTransaction({
             transaction,
-            network: 'mainnet',
+            network: STACKS_MAINNET,
         });
 
         if ('error' in response) {
             throw new Error(response.error);
         }
 
+        console.log('Batch transfer broadcasted:', response);
         return {
             txid: response.txid,
             status: response.txid ? 'success' : 'failed'
