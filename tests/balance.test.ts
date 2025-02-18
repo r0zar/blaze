@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getFullBalance, processDepositEvent, processWithdrawEvent, Subnet, updateUnconfirmedBalance } from '../src';
 
 describe('Balance', () => {
-    const contract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-test-2';
+    const contract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0';
     const signer = 'SP2MR4YP9C7P93EJZC4W1JT8HKAX8Q4HR9Q6X3S88';
 
     it('should get the balance of a user', async () => {

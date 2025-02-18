@@ -47,7 +47,7 @@ export function buildBatchTransferTxOptions(params: BatchTransferOptions) {
             to: Cl.principal(op.to),
             amount: Cl.uint(op.amount),
             nonce: Cl.uint(op.nonce),
-            signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
+            signature: Cl.bufferFromHex(op.signature)
         });
     });
 

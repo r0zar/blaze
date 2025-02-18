@@ -16,15 +16,11 @@ export interface TransactionResult {
     txid: string;
 }
 
-// axios.defaults.headers.common['Content-Type'] = 'application/json';
-
 export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
-    private contractPrincipal: string;
-    private tokenName: string;
     private signer: string;
-    isServer: boolean;
+    private isServer: boolean;
 
     constructor(subnet: string, signer: string) {
         this.signer = signer;
@@ -35,13 +31,10 @@ export class Blaze {
         }
         this.subnet = subnet;
 
-        // Get token identifier from SUBNETS mapping
         this.tokenIdentifier = SUBNETS[subnet as keyof typeof SUBNETS];
         if (!this.tokenIdentifier) {
             throw new Error(`No token identifier found for subnet: ${subnet}`);
         }
-        this.contractPrincipal = this.tokenIdentifier.split('::')[0];
-        this.tokenName = this.tokenIdentifier.split('.')[1];
     }
 
     private async executeServerTransaction(txOptions: any): Promise<TransactionResult> {
@@ -82,7 +75,6 @@ export class Blaze {
 
         const domain = createBlazeDomain();
         const message = createBlazeMessage({
-            token: this.contractPrincipal,
             to: options.to,
             amount: tokens,
             nonce: nextNonce

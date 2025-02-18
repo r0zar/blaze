@@ -3,7 +3,7 @@ import { buildDepositTxOptions, buildWithdrawTxOptions } from '../src/transactio
 import { PostConditionMode } from '@stacks/transactions';
 
 describe('Transaction Utilities', () => {
-    const validSubnet = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-test-2';
+    const validSubnet = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0';
     const validToken = 'SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token::welshcorgicoin';
     const validSigner = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS';
     const validAmount = 100;
@@ -19,7 +19,7 @@ describe('Transaction Utilities', () => {
 
             expect(result).toEqual({
                 contractAddress: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS',
-                contractName: 'blaze-test-2',
+                contractName: 'blaze-welsh-v0',
                 functionName: 'deposit',
                 functionArgs: expect.any(Array),
                 postConditions: expect.any(Array),
@@ -74,7 +74,7 @@ describe('Transaction Utilities', () => {
 
             expect(result).toEqual({
                 contractAddress: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS',
-                contractName: 'blaze-test-2',
+                contractName: 'blaze-welsh-v0',
                 functionName: 'withdraw',
                 functionArgs: expect.any(Array),
                 postConditions: expect.any(Array),
