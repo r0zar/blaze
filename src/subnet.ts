@@ -130,7 +130,7 @@ export class Subnet {
 
     signTransfer(token: string, to: string, amount: number, nonce: number) {
         const domain = createBlazeDomain();
-        const message = createBlazeMessage({ token, to, amount, nonce });
+        const message = createBlazeMessage({ to, amount, nonce });
         return signStructuredData({ message, domain, privateKey: process.env.PRIVATE_KEY! });
     }
 } 
