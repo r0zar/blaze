@@ -114,7 +114,6 @@ export class Subnet {
 
         if (!this.nextNonce.has(key)) {
             const currentNonce = await this.getContractNonce(user);
-            console.log('currentNonce', currentNonce);
             this.nextNonce.set(key, currentNonce + 1);
         }
         return this.nextNonce.get(key)!
