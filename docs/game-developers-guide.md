@@ -48,28 +48,6 @@ const gameBlaze = new Blaze(
 );
 ```
 
-### Environment Configuration
-
-1. **Development Environment**
-```typescript
-// Configure for development
-const DEV_CONFIG = {
-    subnet: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0',
-    tokenContract: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.welsh-token',
-    nodeUrl: 'https://charisma.rocks/api/v0/blaze'  // Blaze Node API endpoint
-};
-```
-
-2. **Production Environment**
-```typescript
-// Configure for production
-const PROD_CONFIG = {
-    subnet: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0',
-    tokenContract: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.welsh-token',
-    nodeUrl: 'https://charisma.rocks/api/v0/blaze'  // Blaze Node API endpoint
-};
-```
-
 ## Common Gaming Use Cases
 
 ### 1. In-Game Currency Management

@@ -7,7 +7,7 @@ This document lists all active subnets on Stacks mainnet that are compatible wit
 ### Welsh Token (WELSH)
 
 
-- **Token Contract**: `SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.welsh-token`
+- **Token Contract**: `SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token`
 - **Subnet Contract**: `SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0`
 - **Status**: Active
 - **Description**: The first token to use Blaze subnets for high-performance transfers
