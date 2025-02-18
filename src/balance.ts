@@ -95,6 +95,7 @@ export async function processDepositEvent(contract: string, user: string, amount
     const key = getBalanceKey(contract, user, 'confirmed');
     const currentBalance = await kv.get<number>(key) ?? 0;
     await kv.set(key, currentBalance + amount);
+    console.log(`Deposit event processed for ${user}, new balance: ${currentBalance + amount}`);
 }
 
 /**
@@ -105,6 +106,7 @@ export async function processWithdrawEvent(contract: string, user: string, amoun
     const key = getBalanceKey(contract, user, 'confirmed');
     const currentBalance = await kv.get<number>(key) ?? 0;
     await kv.set(key, currentBalance - amount);
+    console.log(`Withdrawal event processed for ${user}, new balance: ${currentBalance - amount}`);
 }
 
 /**
@@ -128,4 +130,5 @@ export async function processTransferEvent(contract: string, from: string, to: s
         kv.set(fromKey, fromBalance - amount),
         kv.set(toKey, toBalance + amount)
     ]);
+    console.log(`Transfer event processed for ${from} -> ${to}, new balances: ${fromBalance - amount} and ${toBalance + amount}`);
 } 
