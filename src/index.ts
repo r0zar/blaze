@@ -1,5 +1,6 @@
 import { makeContractCall, broadcastTransaction, Cl, TxBroadcastResult, fetchCallReadOnlyFunction, ClarityType } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
+import { getFullBalance, updateUnconfirmedBalance } from './balance';
 
 /**
  * Core types
@@ -18,7 +19,7 @@ export interface Balance {
     total: number;
 }
 
-export interface NodeStatus {
+export interface Status {
     isProcessing: boolean;
     contracts: string[];
     queueSizes: { [contract: string]: number };
@@ -27,8 +28,6 @@ export interface NodeStatus {
 
 export class Subnet {
     contract: string;
-    unconfirmedBalances: Map<string, number>;
-    nextNonce: Map<string, number>;
     queue: Transfer[];
     isProcessing: boolean;
     lastProcessedBlock: number;
@@ -38,64 +37,35 @@ export class Subnet {
             throw new Error('Contract address is required');
         }
         this.contract = contract;
-        this.unconfirmedBalances = new Map();
-        this.nextNonce = new Map();
         this.queue = [];
         this.isProcessing = false;
         this.lastProcessedBlock = 0;
     }
 
-    private getStateKey(user: string): string {
-        return `${this.contract}:${user}`;
-    }
-
-    // Contract Read Methods
-    private async getContractBalance(user: string): Promise<number> {
-        const [contractAddress, contractName] = this.contract.split('.');
-        try {
-            const result = await fetchCallReadOnlyFunction({
-                contractAddress,
-                contractName,
-                functionName: 'get-balance',
-                functionArgs: [Cl.principal(user)],
-                network: STACKS_MAINNET,
-                senderAddress: user
-            });
-            return result.type === ClarityType.UInt ? Number(result.value) : 0;
-        } catch (error) {
-            console.error('Failed to fetch contract balance:', error);
-            return 0;
-        }
-    }
-
     public async getBalance(user: string): Promise<Balance> {
-        const key = this.getStateKey(user);
-        const onChainBalance = await this.getContractBalance(user);
-        const unconfirmedBalance = this.unconfirmedBalances.get(key) || 0;
-        return {
-            confirmed: onChainBalance,
-            unconfirmed: unconfirmedBalance,
-            total: onChainBalance + unconfirmedBalance
-        };
-    }
-
-    public async updateBalance(user: string, amount: number): Promise<void> {
-        const key = this.getStateKey(user);
-        const currentBalance = this.unconfirmedBalances.get(key) || 0;
-        this.unconfirmedBalances.set(key, currentBalance + amount);
+        return await getFullBalance(this.contract, user);
     }
 
     public async addTransferToQueue(transfer: Transfer): Promise<void> {
         // Update unconfirmed balances
-        const fromKey = this.getStateKey(transfer.signer);
-        const toKey = this.getStateKey(transfer.to);
-        this.unconfirmedBalances.set(fromKey, (this.unconfirmedBalances.get(fromKey) || 0) - transfer.amount);
-        this.unconfirmedBalances.set(toKey, (this.unconfirmedBalances.get(toKey) || 0) + transfer.amount);
+        await Promise.all([
+            updateUnconfirmedBalance(
+                this.contract,
+                transfer.signer,
+                -transfer.amount
+            ),
+            updateUnconfirmedBalance(
+                this.contract,
+                transfer.to,
+                transfer.amount
+            )
+        ]);
+
         // Add to queue
         this.queue.push(transfer);
     }
 
-    public getNodeStatus(): NodeStatus {
+    public getStatus(): Status {
         return {
             isProcessing: this.isProcessing,
             contracts: [this.contract],
@@ -138,7 +108,6 @@ export class Subnet {
             return Cl.tuple({
                 to: Cl.principal(op.to),
                 amount: Cl.uint(op.amount),
-                nonce: Cl.uint(op.nonce),
                 signature: Cl.bufferFromHex(op.signature.replace('0x', ''))
             });
         });
@@ -178,11 +147,10 @@ export class Subnet {
         try {
             const result = await this.executeBatchTransfer(this.queue);
             if (result.status === 'success') {
-                // Clear the queue
+                // Clear the queue - balances will be updated by chainhooks
                 this.queue.splice(0, queueLength);
             }
         } catch (err: any) {
-            // Just log the error and rethrow
             console.error('Failed to process transfers:', err);
             throw err;
         } finally {
@@ -190,3 +158,6 @@ export class Subnet {
         }
     }
 }
+
+// Re-export balance utilities
+export * from './balance';

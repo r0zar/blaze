@@ -12,7 +12,7 @@ describe('Subnet Read Functions', () => {
     });
 
     it('should get node status', () => {
-        const status = subnet.getNodeStatus();
+        const status = subnet.getStatus();
         console.log('Node Status:', status);
     });
 });
