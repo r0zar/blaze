@@ -108,7 +108,7 @@ export class Subnet {
         }
     }
 
-    async executeBatchTransfer(operations: Transfer[]): Promise<{ txid: string; status: string }> {
+    async executeBatchTransfer(operations: Transfer[]): Promise<any> {
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
@@ -133,10 +133,13 @@ export class Subnet {
         };
 
         const transaction = await makeContractCall(txOptions as any);
+        console.log('Transaction:', transaction);
+
         const response: TxBroadcastResult = await broadcastTransaction({
             transaction,
             network: STACKS_MAINNET,
         });
+        console.log('Response:', response);
 
         if ('error' in response) {
             throw new Error(response.error);
