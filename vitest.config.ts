@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import 'dotenv/config';
 
 export default defineConfig({
   test: {
@@ -17,5 +18,8 @@ export default defineConfig({
         "**/types/**",
       ],
     },
+    env: process.env.PRIVATE_KEY ? {
+      PRIVATE_KEY: process.env.PRIVATE_KEY,
+    } : {},
   },
 });

@@ -1,6 +1,8 @@
-import { makeContractCall, broadcastTransaction, Cl, TxBroadcastResult, fetchCallReadOnlyFunction, ClarityType } from '@stacks/transactions';
+import { makeContractCall, broadcastTransaction, Cl, TxBroadcastResult, fetchCallReadOnlyFunction, ClarityType, signStructuredData } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 import { getFullBalance, updateUnconfirmedBalance } from './balance';
+import { createBlazeDomain, createBlazeMessage } from './structured-data';
+import 'dotenv/config';
 
 /**
  * Core types
@@ -47,6 +49,12 @@ export class Subnet {
     }
 
     public async addTransferToQueue(transfer: Transfer): Promise<void> {
+        // verify the balances
+        const balances = await this.getBalance(transfer.signer);
+        if (balances.confirmed < transfer.amount) {
+            throw new Error('Insufficient balance');
+        }
+
         // Update unconfirmed balances
         await Promise.all([
             updateUnconfirmedBalance(
@@ -63,6 +71,7 @@ export class Subnet {
 
         // Add to queue
         this.queue.push(transfer);
+        console.log('Added transfer to queue:', transfer);
     }
 
     public getStatus(): Status {
@@ -139,14 +148,16 @@ export class Subnet {
         };
     }
 
-    async processTransfers(): Promise<void> {
+    async processTransfers(): Promise<any> {
         const queueLength = this.queue.length;
         if (queueLength === 0) return;
 
-        this.isProcessing = true;
+        console.log('Processing transfers:', queueLength);
 
+        this.isProcessing = true;
+        let result: any;
         try {
-            const result = await this.executeBatchTransfer(this.queue);
+            result = await this.executeBatchTransfer(this.queue);
             if (result.status === 'success') {
                 // Clear the queue - balances will be updated by chainhooks
                 this.queue.splice(0, queueLength);
@@ -157,6 +168,14 @@ export class Subnet {
         } finally {
             this.isProcessing = false;
         }
+
+        return result;
+    }
+
+    signTransfer(token: string, to: string, amount: number, nonce: number) {
+        const domain = createBlazeDomain();
+        const message = createBlazeMessage({ token, to, amount, nonce });
+        return signStructuredData({ message, domain, privateKey: process.env.PRIVATE_KEY! });
     }
 }
 

@@ -114,21 +114,32 @@ export async function processWithdrawEvent(contract: string, user: string, amoun
  * The event represents the true state, so we update KV to match
  */
 export async function processTransferEvent(contract: string, from: string, to: string, amount: number): Promise<void> {
-    const fromKey = getBalanceKey(contract, from, 'confirmed');
-    const toKey = getBalanceKey(contract, to, 'confirmed');
+    const fromKeyUnconfirmed = getBalanceKey(contract, from, 'unconfirmed');
+    const fromKeyConfirmed = getBalanceKey(contract, from, 'confirmed');
+    const toKeyUnconfirmed = getBalanceKey(contract, to, 'unconfirmed');
+    const toKeyConfirmed = getBalanceKey(contract, to, 'confirmed');
 
-    const [fromBalanceOrNull, toBalanceOrNull] = await Promise.all([
-        kv.get<number>(fromKey),
-        kv.get<number>(toKey)
+    const [fromBalanceConfirmedOrNull, toBalanceConfirmedOrNull] = await Promise.all([
+        kv.get<number>(fromKeyConfirmed),
+        kv.get<number>(toKeyConfirmed)
     ]);
 
-    const fromBalance = fromBalanceOrNull ?? 0;
-    const toBalance = toBalanceOrNull ?? 0;
+    const [fromBalanceUnconfirmedOrNull, toBalanceUnconfirmedOrNull] = await Promise.all([
+        kv.get<number>(fromKeyUnconfirmed),
+        kv.get<number>(toKeyUnconfirmed)
+    ]);
+
+    const fromBalanceUnconfirmed = fromBalanceUnconfirmedOrNull ?? 0;
+    const toBalanceUnconfirmed = toBalanceUnconfirmedOrNull ?? 0;
+    const fromBalanceConfirmed = fromBalanceConfirmedOrNull ?? 0;
+    const toBalanceConfirmed = toBalanceConfirmedOrNull ?? 0;
 
     // Update both balances to match chain state
     await Promise.all([
-        kv.set(fromKey, fromBalance - amount),
-        kv.set(toKey, toBalance + amount)
+        kv.set(fromKeyConfirmed, fromBalanceConfirmed - amount),
+        kv.set(toKeyConfirmed, toBalanceConfirmed + amount),
+        kv.set(fromKeyUnconfirmed, fromBalanceUnconfirmed - amount),
+        kv.set(toKeyUnconfirmed, toBalanceUnconfirmed + amount)
     ]);
-    console.log(`Transfer event processed for ${from} -> ${to}, new balances: ${fromBalance - amount} and ${toBalance + amount}`);
+    console.log(`Transfer event processed for ${from} -> ${to}, new balances: ${fromBalanceConfirmed - amount} and ${toBalanceConfirmed + amount}`);
 } 

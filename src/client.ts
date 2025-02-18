@@ -1,6 +1,7 @@
-import { Cl, Pc, PostConditionMode } from '@stacks/transactions';
+import { Cl, Pc, PostConditionMode, makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 import { Balance } from '.';
+import { createBlazeDomain, createBlazeMessage } from './structured-data';
 
 const NODE_URL = 'https://charisma.rocks/api/v0/blaze/';
 
@@ -9,13 +10,19 @@ export interface TransferOptions {
     amount: number;
 }
 
+export interface TransactionResult {
+    txid: string;
+}
+
 export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
     private signer: string;
+    private isServer: boolean;
 
     constructor(subnet: string, signer: string) {
         this.signer = signer;
+        this.isServer = typeof window === 'undefined';
 
         if (!subnet) {
             throw new Error('Subnet contract address is required');
@@ -30,115 +37,162 @@ export class Blaze {
         this.tokenIdentifier = tokenId;
     }
 
+    private async executeServerTransaction(txOptions: any): Promise<TransactionResult> {
+        if (!process.env.PRIVATE_KEY) {
+            throw new Error('PRIVATE_KEY environment variable not set');
+        }
+
+        const transaction = await makeContractCall({
+            ...txOptions,
+            senderKey: process.env.PRIVATE_KEY,
+            network: STACKS_MAINNET,
+        });
+
+        const response: TxBroadcastResult = await broadcastTransaction({
+            transaction,
+            network: STACKS_MAINNET,
+        });
+
+        if ('error' in response) {
+            throw new Error(response.error);
+        }
+
+        return { txid: response.txid };
+    }
+
     async getBalance() {
         const response = await fetch(`${NODE_URL}/subnets/${this.subnet}/balances/${this.signer}`);
         const data = await response.json();
         return data as Balance;
     }
 
+    private async signServerTransfer(message: any, domain: any): Promise<string> {
+        if (!process.env.PRIVATE_KEY) {
+            throw new Error('PRIVATE_KEY environment variable not set');
+        }
+        return signStructuredData({ message, domain, privateKey: process.env.PRIVATE_KEY });
+    }
+
     async transfer(options: TransferOptions) {
         const nextNonce = Date.now();
         const tokens = options.amount;
 
-        const domain = Cl.tuple({
-            name: Cl.stringAscii("blaze"),
-            version: Cl.stringAscii("0.1.0"),
-            "chain-id": Cl.uint(STACKS_MAINNET.chainId),
+        const domain = createBlazeDomain();
+        const message = createBlazeMessage({
+            token: this.tokenIdentifier,
+            to: options.to,
+            amount: tokens,
+            nonce: nextNonce
         });
 
-        const message = Cl.tuple({
-            token: Cl.principal(this.tokenIdentifier),
-            to: Cl.principal(options.to),
-            amount: Cl.uint(tokens),
-            nonce: Cl.uint(nextNonce)
-        });
-
-        const { openStructuredDataSignatureRequestPopup } = await import("@stacks/connect");
-        const result: any = await new Promise((resolve) => {
-            openStructuredDataSignatureRequestPopup({
-                domain,
-                message,
-                network: STACKS_MAINNET,
-                onFinish: (data) => resolve(data),
-                onCancel: () => resolve(null)
+        let signature: string;
+        if (this.isServer) {
+            signature = await this.signServerTransfer(message, domain);
+        } else {
+            const { openStructuredDataSignatureRequestPopup } = await import("@stacks/connect");
+            const result: any = await new Promise((resolve) => {
+                openStructuredDataSignatureRequestPopup({
+                    domain,
+                    message,
+                    network: STACKS_MAINNET,
+                    onFinish: (data) => resolve(data),
+                    onCancel: () => resolve(null)
+                });
             });
-        });
 
-        console.log(result);
-
-        if (result.signature) {
-            // send signature to the node for processing
-            const response = await fetch(`${NODE_URL}/xfer`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    signature: result.signature,
-                    signer: this.signer,
-                    to: options.to,
-                    amount: tokens,
-                    nonce: nextNonce,
-                })
-            });
-            const data = await response.json();
-            return data;
+            if (!result?.signature) {
+                throw new Error('User cancelled or signing failed');
+            }
+            signature = result.signature;
         }
 
-        return result;
+        // send signature to the node for processing
+        const response = await fetch(`${NODE_URL}/xfer`, {
+            method: 'POST',
+            body: JSON.stringify({
+                signature,
+                signer: this.signer,
+                to: options.to,
+                amount: tokens,
+                nonce: nextNonce,
+            })
+        });
+
+        if (!response.ok) {
+            console.error(response);
+            throw new Error(`Transfer failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data;
     }
 
-    async deposit(amount: number) {
+    async deposit(amount: number): Promise<TransactionResult> {
         const [contractAddress, contractName] = this.subnet.split('.');
         const [contract, name] = this.tokenIdentifier.split('::');
 
-        const contractCall = {
+        const txOptions = {
             contractAddress,
             contractName,
             functionName: "deposit",
             functionArgs: [Cl.uint(amount)],
             postConditions: [Pc.principal(this.signer).willSendEq(amount).ft(contract as any, name)],
             postConditionMode: PostConditionMode.Deny,
-            network: STACKS_MAINNET
         };
 
+        if (this.isServer) {
+            return this.executeServerTransaction(txOptions);
+        }
+
         const { openContractCall } = await import("@stacks/connect");
-        const result = await new Promise((resolve) => {
+        const result: any = await new Promise((resolve) => {
             openContractCall({
-                ...contractCall,
+                ...txOptions,
+                network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
                 onCancel: () => resolve(null)
             });
         });
 
-        console.log(result);
+        if (!result?.txId) {
+            throw new Error('Transaction cancelled or failed');
+        }
 
-        return result as any;
+        return { txid: result.txId };
     }
 
-    async withdraw(amount: number) {
+    async withdraw(amount: number): Promise<TransactionResult> {
         const [contractAddress, contractName] = this.subnet.split('.');
         const [contract, name] = this.tokenIdentifier.split('::');
 
-        const contractCall = {
+        const txOptions = {
             contractAddress,
             contractName,
             functionName: "withdraw",
             functionArgs: [Cl.uint(amount)],
             postConditions: [Pc.principal(contract).willSendEq(amount).ft(contract as any, name)],
             postConditionMode: PostConditionMode.Deny,
-            network: STACKS_MAINNET,
         };
 
+        if (this.isServer) {
+            return this.executeServerTransaction(txOptions);
+        }
+
         const { openContractCall } = await import("@stacks/connect");
-        const result = await new Promise((resolve) => {
+        const result: any = await new Promise((resolve) => {
             openContractCall({
-                ...contractCall,
+                ...txOptions,
+                network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
                 onCancel: () => resolve(null)
             });
         });
 
-        console.log(result);
+        if (!result?.txId) {
+            throw new Error('Transaction cancelled or failed');
+        }
 
-        return result as any;
+        return { txid: result.txId };
     }
 }
 
