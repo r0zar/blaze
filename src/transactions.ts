@@ -40,7 +40,7 @@ export function buildDepositTxOptions(params: BuildDepositTxOptionsParams): Tran
         contractAddress,
         contractName,
         functionName: "deposit",
-        functionArgs: [Cl.uint(amount)],
+        functionArgs: [Cl.uint(BigInt(amount))],
         postConditions: [Pc.principal(signer).willSendEq(amount).ft(tokenContract as any, tokenName)],
         postConditionMode: PostConditionMode.Deny,
     };
