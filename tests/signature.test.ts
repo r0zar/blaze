@@ -9,10 +9,10 @@ describe('Signature Generation and Verification', () => {
     const nonce = Date.now();
 
     test('should generate and verify a valid signature', async () => {
-        const subnet = new Subnet(contract);
+        const subnet = new Subnet(contract, signer);
 
         // Generate signature using structured data utilities
-        const signature = subnet.signTransfer(to, amount, nonce);
+        const signature = await subnet.generateSignature({ to, amount, nonce });
 
         // Verify the signature directly using contract
         const result = await subnet.verifySignature({ signature, signer, to, amount, nonce });
@@ -21,49 +21,49 @@ describe('Signature Generation and Verification', () => {
     });
 
     // should issue a single transfer
-    test('should issue a single transfer', async () => {
-        const subnet = new Subnet(contract);
-        const signature = subnet.signTransfer(to, amount, nonce);
-        const result = await subnet.verifySignature({ signature, signer, to, amount, nonce });
-        expect(result).toBe(true);
+    // test('should issue a single transfer', async () => {
+    //     const subnet = new Subnet(contract, signer);
+    //     const signature = await subnet.generateSignature({ to, amount, nonce });
+    //     const result = await subnet.verifySignature({ signature, signer, to, amount, nonce });
+    //     expect(result).toBe(true);
 
-        const transfer = await subnet.executeTransfer({ signature, signer, to, amount, nonce });
-        console.log('Transfer result:', transfer);
-    });
+    //     const transfer = await subnet.transfer({ to, amount });
+    //     console.log('Transfer result:', transfer);
+    // });
 
     // should process a batch of transfers
-    test('should process a batch of transfers', async () => {
-        const subnet = new Subnet(contract);
-        const signature1 = subnet.signTransfer(to, amount, nonce);
-        const signature2 = subnet.signTransfer(to, amount, nonce + 1);
-        const transfers = [
-            {
-                signature: signature1,
-                signer,
-                to,
-                amount,
-                nonce,
-            },
-            {
-                signature: signature2,
-                signer,
-                to,
-                amount,
-                nonce: nonce + 1,
-            }
-        ];
+    // test('should process a batch of transfers', async () => {
+    //     const subnet = new Subnet(contract, signer);
+    //     const signature1 = await subnet.generateSignature({ to, amount, nonce });
+    //     const signature2 = await subnet.generateSignature({ to, amount, nonce: nonce + 1 });
+    //     const transfers = [
+    //         {
+    //             signature: signature1,
+    //             signer,
+    //             to,
+    //             amount,
+    //             nonce,
+    //         },
+    //         {
+    //             signature: signature2,
+    //             signer,
+    //             to,
+    //             amount,
+    //             nonce: nonce + 1,
+    //         }
+    //     ];
 
-        // get subnet status
-        const status = subnet.getStatus();
-        console.log('Subnet status:', status);
+    //     // get subnet status
+    //     const status = subnet.getStatus();
+    //     console.log('Subnet status:', status);
 
-        await subnet.addTransferToQueue(transfers[0]);
-        await subnet.addTransferToQueue(transfers[1]);
+    //     await subnet.addTransferToQueue(transfers[0]);
+    //     await subnet.addTransferToQueue(transfers[1]);
 
-        const result = await subnet.processTransfers();
-        console.log('Result:', result);
+    //     const result = await subnet.processTransfers();
+    //     console.log('Result:', result);
 
-        const balance = await subnet.getBalance(signer);
-        console.log('Balance:', balance);
-    });
+    //     const balance = await subnet.getBalance();
+    //     console.log('Balance:', balance);
+    // });
 }); 

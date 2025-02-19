@@ -2,6 +2,11 @@ import { kv } from '@vercel/kv';
 import { fetchCallReadOnlyFunction, Cl, ClarityType } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 
+export interface BalanceOptions {
+    includeConfirmed?: boolean;
+    includeUnconfirmed?: boolean;
+}
+
 /**
  * Get the storage key for a user's balance
  */
@@ -72,19 +77,57 @@ export async function updateUnconfirmedBalance(contract: string, user: string, a
 }
 
 /**
- * Get a user's complete balance information
+ * Get a user's balance information based on options
+ * By default, returns total balance (confirmed + unconfirmed)
+ * Use options to get specific balance types
  */
-export async function getFullBalance(contract: string, user: string): Promise<{ confirmed: number; unconfirmed: number; total: number }> {
+export async function getBalance(
+    contract: string,
+    user: string,
+    options: BalanceOptions = {}
+): Promise<{ total: number; confirmed?: number; unconfirmed?: number }> {
+    const { includeConfirmed = false, includeUnconfirmed = false } = options;
+    const getTotal = !includeConfirmed && !includeUnconfirmed;
+
     const [confirmed, unconfirmed] = await Promise.all([
         getConfirmedBalance(contract, user),
         getUnconfirmedBalance(contract, user)
     ]);
 
-    return {
-        confirmed,
-        unconfirmed,
+    const result: { total: number; confirmed?: number; unconfirmed?: number } = {
         total: confirmed + unconfirmed
     };
+
+    if (includeConfirmed) {
+        result.confirmed = confirmed;
+    }
+
+    if (includeUnconfirmed) {
+        result.unconfirmed = unconfirmed;
+    }
+
+    return result;
+}
+
+/**
+ * Update a user's balance with options to specify which balances to update
+ */
+export async function updateBalance(
+    contract: string,
+    user: string,
+    amount: number,
+    options: BalanceOptions = {}
+): Promise<void> {
+    const { includeConfirmed = false, includeUnconfirmed = false } = options;
+    const updateTotal = !includeConfirmed && !includeUnconfirmed;
+
+    if (updateTotal || includeConfirmed) {
+        await updateConfirmedBalance(contract, user, amount);
+    }
+
+    if (updateTotal || includeUnconfirmed) {
+        await updateUnconfirmedBalance(contract, user, amount);
+    }
 }
 
 /**
@@ -92,10 +135,17 @@ export async function getFullBalance(contract: string, user: string): Promise<{ 
  * The event represents the true state, so we update KV to match
  */
 export async function processDepositEvent(contract: string, user: string, amount: number): Promise<void> {
-    const key = getBalanceKey(contract, user, 'confirmed');
-    const currentBalance = await kv.get<number>(key) ?? 0;
-    await kv.set(key, currentBalance + amount);
-    console.log(`Deposit event processed for ${user}, new balance: ${currentBalance + amount}`);
+    const [confirmed, unconfirmed] = await Promise.all([
+        getConfirmedBalance(contract, user),
+        getUnconfirmedBalance(contract, user)
+    ]);
+
+    await Promise.all([
+        updateConfirmedBalance(contract, user, confirmed + amount),
+        updateUnconfirmedBalance(contract, user, unconfirmed + amount)
+    ]);
+
+    console.log(`Deposit event processed for ${user}, new balance: ${confirmed + amount}`);
 }
 
 /**
@@ -103,10 +153,17 @@ export async function processDepositEvent(contract: string, user: string, amount
  * The event represents the true state, so we update KV to match
  */
 export async function processWithdrawEvent(contract: string, user: string, amount: number): Promise<void> {
-    const key = getBalanceKey(contract, user, 'confirmed');
-    const currentBalance = await kv.get<number>(key) ?? 0;
-    await kv.set(key, currentBalance - amount);
-    console.log(`Withdrawal event processed for ${user}, new balance: ${currentBalance - amount}`);
+    const [confirmed, unconfirmed] = await Promise.all([
+        getConfirmedBalance(contract, user),
+        getUnconfirmedBalance(contract, user)
+    ]);
+
+    await Promise.all([
+        updateConfirmedBalance(contract, user, confirmed - amount),
+        updateUnconfirmedBalance(contract, user, unconfirmed - amount)
+    ]);
+
+    console.log(`Withdrawal event processed for ${user}, new balance: ${confirmed - amount}`);
 }
 
 /**
@@ -114,32 +171,20 @@ export async function processWithdrawEvent(contract: string, user: string, amoun
  * The event represents the true state, so we update KV to match
  */
 export async function processTransferEvent(contract: string, from: string, to: string, amount: number): Promise<void> {
-    const fromKeyUnconfirmed = getBalanceKey(contract, from, 'unconfirmed');
-    const fromKeyConfirmed = getBalanceKey(contract, from, 'confirmed');
-    const toKeyUnconfirmed = getBalanceKey(contract, to, 'unconfirmed');
-    const toKeyConfirmed = getBalanceKey(contract, to, 'confirmed');
-
-    const [fromBalanceConfirmedOrNull, toBalanceConfirmedOrNull] = await Promise.all([
-        kv.get<number>(fromKeyConfirmed),
-        kv.get<number>(toKeyConfirmed)
+    const [fromConfirmed, fromUnconfirmed, toConfirmed, toUnconfirmed] = await Promise.all([
+        getConfirmedBalance(contract, from),
+        getUnconfirmedBalance(contract, from),
+        getConfirmedBalance(contract, to),
+        getUnconfirmedBalance(contract, to)
     ]);
-
-    const [fromBalanceUnconfirmedOrNull, toBalanceUnconfirmedOrNull] = await Promise.all([
-        kv.get<number>(fromKeyUnconfirmed),
-        kv.get<number>(toKeyUnconfirmed)
-    ]);
-
-    const fromBalanceUnconfirmed = fromBalanceUnconfirmedOrNull ?? 0;
-    const toBalanceUnconfirmed = toBalanceUnconfirmedOrNull ?? 0;
-    const fromBalanceConfirmed = fromBalanceConfirmedOrNull ?? 0;
-    const toBalanceConfirmed = toBalanceConfirmedOrNull ?? 0;
 
     // Update both balances to match chain state
     await Promise.all([
-        kv.set(fromKeyConfirmed, fromBalanceConfirmed - amount),
-        kv.set(toKeyConfirmed, toBalanceConfirmed + amount),
-        kv.set(fromKeyUnconfirmed, fromBalanceUnconfirmed - amount),
-        kv.set(toKeyUnconfirmed, toBalanceUnconfirmed + amount)
+        updateConfirmedBalance(contract, from, fromConfirmed - amount),
+        updateUnconfirmedBalance(contract, from, fromUnconfirmed - amount),
+        updateConfirmedBalance(contract, to, toConfirmed + amount),
+        updateUnconfirmedBalance(contract, to, toUnconfirmed + amount)
     ]);
-    console.log(`Transfer event processed for ${from} -> ${to}, new balances: ${fromBalanceConfirmed - amount} and ${toBalanceConfirmed + amount}`);
+
+    console.log(`Transfer event processed for ${from} -> ${to}, new balances: ${fromConfirmed - amount} and ${toConfirmed + amount}`);
 } 

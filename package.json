@@ -1,18 +1,24 @@
 {
   "name": "blaze-sdk",
-  "version": "0.1.44",
-  "description": "SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
+  "version": "0.2.0",
+  "description": "A lightweight SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/r0zar/blaze.git"
-  },
   "exports": {
     ".": {
       "require": "./dist/index.js",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "require": "./dist/client/index.js",
+      "import": "./dist/client/index.mjs",
+      "types": "./dist/client/index.d.ts"
+    },
+    "./server": {
+      "require": "./dist/server/index.js",
+      "import": "./dist/server/index.mjs",
+      "types": "./dist/server/index.d.ts"
     }
   },
   "files": [
@@ -48,12 +54,16 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@stacks/connect": "^7.0.2",
-    "@stacks/network": "^7.0.2",
-    "@stacks/transactions": "^7.0.2",
+    "@stacks/network": "^6.0.0",
+    "@stacks/transactions": "^6.0.0",
+    "axios": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@stacks/connect": ">=7.0.0"
+  },
+  "optionalDependencies": {
     "@vercel/kv": "^3.0.0",
-    "axios": "^1.7.9",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -65,14 +75,8 @@
     "prettier": "^3.0.0",
     "rimraf": "^6.0.1",
     "tsup": "^8.0.2",
-    "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.1"
-  },
-  "peerDependencies": {
-    "@stacks/connect": ">=7.0.0",
-    "@stacks/network": ">=6.0.0",
-    "@stacks/transactions": ">=6.0.0"
   },
   "publishConfig": {
     "access": "public"

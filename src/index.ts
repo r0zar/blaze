@@ -1,5 +1,4 @@
-export * from './balance';
-export * from './subnet';
-export * from './client';
-export * from './constants';
-export * from './structured-data';
+export { Blaze } from './client';
+export { Subnet } from './server';
+export * from './shared/types';
+export * from './shared/constants';

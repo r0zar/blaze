@@ -7,9 +7,6 @@ export interface BlazeMessage {
     nonce: number;
 }
 
-/**
- * Creates a consistent domain tuple for Blaze signatures
- */
 export function createBlazeDomain() {
     return Cl.tuple({
         name: Cl.stringAscii("blaze"),
@@ -18,13 +15,10 @@ export function createBlazeDomain() {
     });
 }
 
-/**
- * Creates a consistent message tuple for Blaze signatures
- */
 export function createBlazeMessage(message: BlazeMessage) {
     return Cl.tuple({
         to: Cl.principal(message.to),
         amount: Cl.uint(message.amount),
         nonce: Cl.uint(message.nonce)
     });
-} 
+}
