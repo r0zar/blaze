@@ -1,4 +1,3 @@
-import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
 import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
