@@ -40,6 +40,7 @@ export class Blaze {
     }
 
     private async executeServerTransaction(txOptions: any): Promise<TransactionResult> {
+        await import('dotenv/config');
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
@@ -65,6 +66,7 @@ export class Blaze {
     }
 
     private async signServerTransfer(message: any, domain: any): Promise<string> {
+        await import('dotenv/config');
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
