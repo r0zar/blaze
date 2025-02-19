@@ -1,4 +1,5 @@
 import { STACKS_MAINNET } from '@stacks/network';
+import { openStructuredDataSignatureRequestPopup } from '@stacks/connect';
 import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
@@ -199,7 +200,6 @@ export class Blaze {
             nonce: nextNonce
         });
 
-        const { openStructuredDataSignatureRequestPopup } = await import("@stacks/connect");
         const result: any = await new Promise((resolve) => {
             openStructuredDataSignatureRequestPopup({
                 domain,
