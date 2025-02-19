@@ -2,7 +2,7 @@ import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructur
 import { STACKS_MAINNET } from '@stacks/network';
 import { Balance } from '.';
 import { createBlazeDomain, createBlazeMessage } from './structured-data';
-import { NODE_URL, SUBNETS } from './constants';
+import { SUBNETS } from './constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from './transactions';
 import type { FinishedTxData } from './types';
 import axios from 'axios';
@@ -21,10 +21,12 @@ export class Blaze {
     private tokenIdentifier: string;
     private signer: string;
     private isServer: boolean;
+    public nodeUrl: string;
 
-    constructor(subnet: string, signer: string) {
+    constructor(subnet: string, signer: string, nodeUrl: string = 'https://charisma.rocks/api/v0/blaze') {
         this.signer = signer;
         this.isServer = typeof window === 'undefined';
+        this.nodeUrl = nodeUrl;
 
         if (!subnet) {
             throw new Error('Subnet contract address is required');
@@ -58,7 +60,7 @@ export class Blaze {
     }
 
     async getBalance() {
-        const response = await axios.get(`${NODE_URL}/subnets/${this.subnet}/balances/${this.signer}`);
+        const response = await axios.get(`${this.nodeUrl}/subnets/${this.subnet}/balances/${this.signer}`);
         return response.data as Balance;
     }
 
@@ -100,7 +102,7 @@ export class Blaze {
         }
 
         // send signature to the node for processing
-        const response = await axios.post(`${NODE_URL}/subnets/${this.subnet}/xfer`, {
+        const response = await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/xfer`, {
             signature,
             signer: this.signer,
             to: options.to,

@@ -11,8 +11,7 @@ This document lists all active subnets on Stacks mainnet that are compatible wit
 - **Subnet Contract**: `SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0`
 - **Status**: Active
 - **Description**: The first token to use Blaze subnets for high-performance transfers
-- **Website**: [welsh-token.xyz](https://welsh-token.xyz)
-- **Explorer**: [https://explorer.hiro.so/txid/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token?chain=mainnet](https://explorer.hiro.so/txid/SP3NE50GEXFG9SZGTT51P40X2CKYSZ5CC4ZTZ7A2G.welshcorgicoin-token?chain=mainnet)
+- **Explorer**: [https://explorer.hiro.so/txid/SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0](https://explorer.hiro.so/txid/SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-welsh-v0)
 
 ### Charisma Token (CHA) - Coming Soon
 
@@ -21,7 +20,6 @@ This document lists all active subnets on Stacks mainnet that are compatible wit
 - **Subnet Contract**: `[TBA]`
 - **Status**: In Development
 - **Description**: Native token of the Charisma protocol
-- **Website**: [charisma.xyz](https://charisma.xyz)
 - **Explorer**: Coming Soon
 
 ### sBTC - Coming Soon
@@ -31,7 +29,6 @@ This document lists all active subnets on Stacks mainnet that are compatible wit
 - **Subnet Contract**: `[TBA]`
 - **Status**: In Development
 - **Description**: Bitcoin wrapped through the sBTC protocol
-- **Website**: [sbtc.xyz](https://sbtc.xyz)
 - **Explorer**: Coming Soon
 
 ## Adding Your Token
