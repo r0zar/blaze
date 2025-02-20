@@ -11,15 +11,13 @@ export class Subnet {
     private subnet: string;
     private tokenIdentifier: string;
     private signer: string;
-    public nodeUrl: string;
     private queue: Transfer[];
     private lastProcessedBlock: number;
     private eventClients: Map<string, Set<(event: BlazeEvent) => void>> = new Map();
     private config = config;
 
-    constructor(subnet: string, signer: string, nodeUrl: string = 'https://charisma.rocks/api/v0/blaze') {
+    constructor(subnet: string, signer: string) {
         this.signer = signer;
-        this.nodeUrl = nodeUrl;
         this.queue = [];
         this.lastProcessedBlock = 0;
 

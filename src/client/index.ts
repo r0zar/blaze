@@ -4,6 +4,7 @@ import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
 import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription, FinishedTxData } from '../types';
+import { isBrowser, BrowserFeatures, MockEventSource } from '../shared/utils';
 import axios from 'axios';
 
 // Re-export types that consumers might need
@@ -21,12 +22,17 @@ export type {
 const HEARTBEAT_INTERVAL = 5000; // 5 seconds
 const MAX_RETRY_DELAY = 32000; // Max retry delay of 32 seconds
 
+// Get the appropriate EventSource implementation
+const EventSourceImpl = isBrowser && BrowserFeatures.hasEventSource
+    ? window.EventSource
+    : MockEventSource;
+
 export class Blaze {
     private subnet: string;
     private tokenIdentifier: string;
     private signer: string;
-    public nodeUrl: string;
-    private eventSource: EventSource | null = null;
+    private nodeUrl: string;
+    private eventSource: InstanceType<typeof EventSourceImpl> | null = null;
     private eventHandlers: Map<EventType, Set<(event: BlazeEvent) => void>> = new Map();
     private lastBalance: Balance = { total: 0 };
     private retryCount = 0;
@@ -34,10 +40,12 @@ export class Blaze {
     private lastBalanceUpdate: number = 0;
     private walletConnected: boolean = false;
     private onWalletStateChange?: (connected: boolean) => void;
+    private isServerSide: boolean;
 
     constructor(subnet: string, signer: string, nodeUrl: string = 'https://charisma.rocks/api/v0/blaze') {
         this.signer = signer;
         this.nodeUrl = nodeUrl;
+        this.isServerSide = !isBrowser;
 
         if (!subnet) {
             throw new Error('Subnet contract address is required');
@@ -53,6 +61,11 @@ export class Blaze {
         ['transfer', 'deposit', 'withdraw', 'balance', 'batch'].forEach(type => {
             this.eventHandlers.set(type as EventType, new Set());
         });
+
+        // Warn if running in server environment
+        if (this.isServerSide) {
+            console.warn('Blaze client is running in a server environment. Some features may be limited.');
+        }
     }
 
     // Add wallet state change listener
@@ -62,6 +75,11 @@ export class Blaze {
 
     // Connect wallet
     public async connectWallet(): Promise<{ address: string } | null> {
+        if (this.isServerSide) {
+            console.warn('Wallet connections are not supported in server environment');
+            return null;
+        }
+
         try {
             return new Promise((resolve) => {
                 showConnect({
@@ -120,7 +138,12 @@ export class Blaze {
     }
 
     private connectEventSource() {
-        if (this.eventSource?.readyState === EventSource.OPEN) {
+        if (this.isServerSide) {
+            console.warn('EventSource connections are not supported in server environment');
+            return;
+        }
+
+        if (this.eventSource?.readyState === EventSourceImpl.OPEN) {
             return;
         }
 
@@ -137,9 +160,9 @@ export class Blaze {
         const url = new URL(`${this.nodeUrl}/subnets/${this.subnet}/events`);
         url.searchParams.set('signer', this.signer);
 
-        this.eventSource = new EventSource(url.toString());
+        this.eventSource = new EventSourceImpl(url.toString());
 
-        this.eventSource.onmessage = (event) => {
+        this.eventSource.onmessage = (event: any) => {
             try {
                 if (event.data === 'heartbeat') {
                     this.handleHeartbeat();
@@ -156,7 +179,7 @@ export class Blaze {
             }
         };
 
-        this.eventSource.onerror = (error) => {
+        this.eventSource.onerror = (error: any) => {
             console.error('EventSource error:', error);
             this.eventSource?.close();
             this.eventSource = null;

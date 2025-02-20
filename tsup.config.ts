@@ -18,7 +18,7 @@ export default defineConfig([
     format: ['esm', 'cjs'],
     dts: true,
     clean: true,
-    platform: 'browser',
+    platform: 'neutral',
     target: 'es2020',
     external: [
       '@stacks/connect',
@@ -28,8 +28,8 @@ export default defineConfig([
     ],
     esbuildOptions(options) {
       options.define = {
-        'process.env.BROWSER': 'true',
-        'global': 'window'
+        ...options.define,
+        'global': 'globalThis'
       };
     },
     inject: ['src/client/use-client.ts']
@@ -52,6 +52,7 @@ export default defineConfig([
     ],
     esbuildOptions(options) {
       options.define = {
+        ...options.define,
         'process.env.BROWSER': 'false'
       };
     }
