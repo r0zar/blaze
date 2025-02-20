@@ -1,5 +1,5 @@
 import { STACKS_MAINNET } from '@stacks/network';
-import { openStructuredDataSignatureRequestPopup } from '@stacks/connect';
+import { showSignStructuredMessage, showConnect, FinishedAuthData } from '@stacks/connect';
 import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
@@ -21,6 +21,8 @@ export class Blaze {
     private retryCount = 0;
     private heartbeatTimeout: NodeJS.Timeout | null = null;
     private lastBalanceUpdate: number = 0;
+    private walletConnected: boolean = false;
+    private onWalletStateChange?: (connected: boolean) => void;
 
     constructor(subnet: string, signer: string, nodeUrl: string = 'https://charisma.rocks/api/v0/blaze') {
         this.signer = signer;
@@ -40,6 +42,70 @@ export class Blaze {
         ['transfer', 'deposit', 'withdraw', 'balance', 'batch'].forEach(type => {
             this.eventHandlers.set(type as EventType, new Set());
         });
+    }
+
+    // Add wallet state change listener
+    public onWalletChange(callback: (connected: boolean) => void) {
+        this.onWalletStateChange = callback;
+    }
+
+    // Connect wallet
+    public async connectWallet(): Promise<{ address: string } | null> {
+        try {
+            return new Promise((resolve) => {
+                showConnect({
+                    appDetails: {
+                        name: 'Blaze Subnets',
+                        icon: 'https://charisma.rocks/charisma.png',
+                    },
+                    onFinish: (data: FinishedAuthData) => {
+                        this.walletConnected = true;
+                        this.signer = data.userSession.loadUserData().profile.stxAddress.mainnet;
+                        this.onWalletStateChange?.(true);
+                        resolve({ address: data.userSession.loadUserData().profile.stxAddress.mainnet });
+                    },
+                    onCancel: () => {
+                        this.walletConnected = false;
+                        this.onWalletStateChange?.(false);
+                        resolve(null);
+                    },
+                    userSession: undefined,
+                });
+            });
+        } catch (error) {
+            console.error('Error connecting wallet:', error);
+            this.walletConnected = false;
+            this.onWalletStateChange?.(false);
+            return null;
+        }
+    }
+
+    // Disconnect wallet
+    public disconnectWallet() {
+        this.walletConnected = false;
+        this.signer = '';
+        // Clean up any existing subscriptions
+        this.eventSource?.close();
+        this.eventSource = null;
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
+        // Reset balance
+        this.lastBalance = { total: 0 };
+        this.lastBalanceUpdate = 0;
+        // Notify about wallet state change
+        this.onWalletStateChange?.(false);
+    }
+
+    // Check if wallet is connected
+    public isWalletConnected(): boolean {
+        return this.walletConnected;
+    }
+
+    // Get current wallet address
+    public getWalletAddress(): string {
+        return this.signer;
     }
 
     private connectEventSource() {
@@ -201,7 +267,7 @@ export class Blaze {
         });
 
         const result: any = await new Promise((resolve) => {
-            openStructuredDataSignatureRequestPopup({
+            showSignStructuredMessage({
                 domain,
                 message,
                 network: STACKS_MAINNET,
