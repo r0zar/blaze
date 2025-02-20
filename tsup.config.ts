@@ -12,6 +12,20 @@ export default defineConfig({
     '@stacks/connect',
     '@stacks/network',
     '@stacks/transactions',
-    'axios'
-  ]
+    'axios',
+    'fs',
+    'path',
+    'os',
+    'crypto',
+    'dotenv'
+  ],
+  noExternal: ['@vercel/kv'],
+  esbuildOptions(options) {
+    options.define = {
+      ...options.define,
+      'global': 'globalThis'
+    };
+    options.platform = 'neutral';
+    options.conditions = ['import', 'default'];
+  }
 });
