@@ -1,5 +1,5 @@
 import { STACKS_MAINNET } from '@stacks/network';
-import { showSignStructuredMessage, showConnect, FinishedAuthData } from '@stacks/connect';
+import { openStructuredDataSignatureRequestPopup, showConnect, FinishedAuthData } from '@stacks/connect';
 import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
@@ -301,7 +301,7 @@ export class Blaze {
         });
 
         const result: any = await new Promise((resolve) => {
-            showSignStructuredMessage({
+            openStructuredDataSignatureRequestPopup({
                 domain,
                 message,
                 network: STACKS_MAINNET,
