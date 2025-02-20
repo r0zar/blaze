@@ -7,6 +7,18 @@ import type { FinishedTxData } from '../shared/types';
 import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription } from '../shared/types';
 import axios from 'axios';
 
+// Re-export types that consumers might need
+export type {
+    Balance,
+    BalanceOptions,
+    TransferOptions,
+    Transfer,
+    BlazeEvent,
+    EventType,
+    EventSubscription,
+    FinishedTxData
+};
+
 const HEARTBEAT_INTERVAL = 5000; // 5 seconds
 const MAX_RETRY_DELAY = 32000; // Max retry delay of 32 seconds
 
