@@ -9,7 +9,15 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "main": "./dist/client/index.js",
+  "module": "./dist/client/index.mjs",
+  "types": "./dist/client/index.d.ts",
   "exports": {
+    ".": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.mjs",
+      "require": "./dist/client/index.js"
+    },
     "./client": {
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.mjs",
@@ -21,6 +29,16 @@
       "require": "./dist/server/index.js"
     }
   },
+  "typesVersions": {
+    "*": {
+      "client": [
+        "./dist/client/index.d.ts"
+      ],
+      "server": [
+        "./dist/server/index.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
     "README.md"
@@ -30,7 +48,14 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "test": "vitest",
-    "prepublishOnly": "npm run clean && npm run build"
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "prepublishOnly": "git diff-index --quiet HEAD || (echo 'Working directory not clean. Please commit changes first.' && exit 1)",
+    "prepare": "npm run clean && npm run build",
+    "publish:patch": "npm run test && npm run version:patch && npm publish && git push --follow-tags",
+    "publish:minor": "npm run test && npm run version:minor && npm publish && git push --follow-tags",
+    "publish:major": "npm run test && npm run version:major && npm publish && git push --follow-tags"
   },
   "keywords": [
     "stacks",

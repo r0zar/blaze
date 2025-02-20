@@ -14,7 +14,17 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "declaration": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "blaze-sdk/client": [
+        "./src/client"
+      ],
+      "blaze-sdk/server": [
+        "./src/server"
+      ]
+    }
   },
   "include": [
     "src"
