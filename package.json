@@ -6,9 +6,16 @@
     "type": "git",
     "url": "git+https://github.com/r0zar/blaze.git"
   },
+  "author": "rozar.btc",
+  "bugs": {
+    "url": "https://github.com/r0zar/blaze/issues"
+  },
+  "homepage": "https://github.com/r0zar/blaze#readme",
   "engines": {
     "node": ">=18.0.0"
   },
+  "type": "module",
+  "sideEffects": false,
   "main": "./dist/client/index.js",
   "module": "./dist/client/index.mjs",
   "types": "./dist/client/index.d.ts",
@@ -27,6 +34,11 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.mjs",
       "require": "./dist/server/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.js"
     }
   },
   "typesVersions": {
@@ -36,6 +48,9 @@
       ],
       "server": [
         "./dist/server/index.d.ts"
+      ],
+      "types": [
+        "./dist/types.d.ts"
       ]
     }
   },
@@ -48,23 +63,25 @@
     "build": "tsup",
     "clean": "rimraf dist",
     "test": "vitest",
-    "version:patch": "npm version patch",
-    "version:minor": "npm version minor",
-    "version:major": "npm version major",
-    "prepublishOnly": "git diff-index --quiet HEAD || (echo 'Working directory not clean. Please commit changes first.' && exit 1)",
-    "prepare": "npm run clean && npm run build",
-    "publish:patch": "npm run test && npm run version:patch && npm publish && git push --follow-tags",
-    "publish:minor": "npm run test && npm run version:minor && npm publish && git push --follow-tags",
-    "publish:major": "npm run test && npm run version:major && npm publish && git push --follow-tags"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run lint",
+    "version:patch": "npm version patch -m 'chore: release v%s'",
+    "version:minor": "npm version minor -m 'feat: release v%s'",
+    "version:major": "npm version major -m 'BREAKING CHANGE: release v%s'",
+    "publish:patch": "npm run version:patch && npm publish && git push --follow-tags",
+    "publish:minor": "npm run version:minor && npm publish && git push --follow-tags",
+    "publish:major": "npm run version:major && npm publish && git push --follow-tags"
   },
   "keywords": [
     "stacks",
     "blockchain",
     "scaling",
     "batching",
-    "transfers"
+    "transfers",
+    "layer2",
+    "subnet",
+    "web3"
   ],
-  "license": "MIT",
   "dependencies": {
     "@stacks/network": "^7.0.2",
     "@stacks/transactions": "^7.0.4",
@@ -82,5 +99,9 @@
     "tsup": "^8.0.2",
     "typescript": "^5.3.3",
     "vitest": "^1.2.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

@@ -1,6 +1,16 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig([
+  // Types build
+  {
+    entry: ['src/types.ts'],
+    outDir: 'dist',
+    format: ['esm', 'cjs'],
+    dts: true,
+    clean: false,
+    platform: 'neutral'
+  },
+
   // Client build
   {
     entry: ['src/client/index.ts'],
@@ -31,7 +41,7 @@ export default defineConfig([
     outDir: 'dist/server',
     format: ['esm', 'cjs'],
     dts: true,
-    clean: true,
+    clean: false,
     platform: 'node',
     target: 'node18',
     external: [

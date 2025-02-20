@@ -3,8 +3,7 @@ import { showSignStructuredMessage, showConnect, FinishedAuthData } from '@stack
 import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { FinishedTxData } from '../shared/types';
-import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription } from '../shared/types';
+import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription, FinishedTxData } from '../types';
 import axios from 'axios';
 
 // Re-export types that consumers might need

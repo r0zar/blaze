@@ -1,3 +1,4 @@
+// Core types
 export interface Balance {
     total: number;
     confirmed?: number;
@@ -14,14 +15,6 @@ export interface TransferOptions {
     amount: number;
 }
 
-export interface TransactionResult {
-    txid: string;
-}
-
-export interface FinishedTxData {
-    txId: string;
-}
-
 export interface Transfer {
     signature: string;
     signer: string;
@@ -30,10 +23,12 @@ export interface Transfer {
     nonce: number;
 }
 
-export interface BatchTransferOptions {
-    contract: string;
-    operations: Transfer[];
-    privateKey: string;
+export interface FinishedTxData {
+    txId: string;
+}
+
+export interface TransactionResult {
+    txid: string;
 }
 
 export interface Status {
@@ -42,6 +37,7 @@ export interface Status {
     lastProcessedBlock?: number;
 }
 
+// Event types
 export type EventType = 'transfer' | 'deposit' | 'withdraw' | 'balance' | 'batch';
 
 export interface BlazeEvent {
@@ -61,18 +57,4 @@ export interface BlazeEvent {
 
 export interface EventSubscription {
     unsubscribe: () => void;
-}
-
-// Client to Server Events
-export type ClientEventType = 'client_transfer' | 'client_deposit' | 'client_withdraw' | 'subscribe_balance';
-
-export interface ClientEvent {
-    type: ClientEventType;
-    contract: string;
-    signer: string;
-    data: {
-        amount?: number;
-        txid?: string;
-        timestamp: number;
-    };
 } 
