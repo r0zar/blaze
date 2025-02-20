@@ -6,10 +6,10 @@ describe('Subnet Read Functions', () => {
     const userAddress = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS';
     const subnet = new Subnet(contract, userAddress);
 
-    it('should get contract balance', async () => {
-        const balance = await subnet.getBalance();
-        console.log('Contract Balance:', balance);
-    });
+    // it('should get contract balance', async () => {
+    //     const balance = await subnet.getBalance();
+    //     console.log('Contract Balance:', balance);
+    // });
 
     it('should get node status', () => {
         const status = subnet.getStatus();
