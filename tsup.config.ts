@@ -12,6 +12,7 @@ const baseConfig = {
   minify: process.env.NODE_ENV === 'production',
   sourcemap: true,
   treeshake: true,
+  splitting: true,
   tsconfig: './tsconfig.json',
 };
 
@@ -59,8 +60,7 @@ export default defineConfig([
       options.banner = {
         js: '"use client";', // React server components support
       };
-    },
-    splitting: true,
+    }
   },
 
   // Server-specific build
