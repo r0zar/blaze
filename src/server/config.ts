@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 export interface ServerConfig {
     privateKey: string | undefined;
 }
