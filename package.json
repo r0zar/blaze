@@ -4,10 +4,10 @@
   "description": "A lightweight SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-repo/blaze-sdk.git"
+    "url": "git+https://github.com/r0zar/blaze.git"
   },
   "bugs": {
-    "url": "https://github.com/your-repo/blaze-sdk/issues"
+    "url": "https://github.com/r0zar/blaze/issues"
   },
   "engines": {
     "node": ">=18.0.0"
