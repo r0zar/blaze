@@ -1,5 +1,5 @@
 import { Cl } from '@stacks/transactions';
-import { WithdrawOptions, DepositOptions } from 'src/types';
+import { WithdrawOptions, DepositOptions } from '../types';
 
 export function buildDepositTxOptions(options: DepositOptions) {
     const [contractAddress, contractName] = options.subnet.split('.');

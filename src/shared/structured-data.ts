@@ -1,6 +1,6 @@
 import { Cl } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
-import { BlazeMessage } from 'src/types';
+import { BlazeMessage } from '../types';
 
 export function createBlazeDomain() {
     return Cl.tuple({
