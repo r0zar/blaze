@@ -18,16 +18,15 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "paths": {
-      "blaze-sdk/client": [
-        "./src/client"
-      ],
-      "blaze-sdk/server": [
-        "./src/server"
+      "@/*": [
+        "./src/*"
       ]
     }
   },
   "include": [
-    "src"
+    "src",
+    "README.md",
+    "docs"
   ],
   "exclude": [
     "node_modules",

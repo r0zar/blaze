@@ -15,7 +15,6 @@
     "node": ">=18.0.0"
   },
   "type": "module",
-  "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -55,15 +54,11 @@
     "web3"
   ],
   "dependencies": {
+    "@stacks/connect": ">=7.0.0",
     "@stacks/network": "^7.0.2",
     "@stacks/transactions": "^7.0.4",
+    "@vercel/kv": "^3.0.0",
     "axios": "^1.0.0"
-  },
-  "peerDependencies": {
-    "@stacks/connect": ">=7.0.0"
-  },
-  "optionalDependencies": {
-    "@vercel/kv": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
