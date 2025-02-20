@@ -1,11 +1,6 @@
 import { Cl } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
-
-export interface BlazeMessage {
-    to: string;
-    amount: number;
-    nonce: number;
-}
+import { BlazeMessage } from 'src/types';
 
 export function createBlazeDomain() {
     return Cl.tuple({

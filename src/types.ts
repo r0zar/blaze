@@ -37,6 +37,21 @@ export interface Status {
     lastProcessedBlock?: number;
 }
 
+export interface BlazeMessage {
+    to: string;
+    amount: number;
+    nonce: number;
+}
+
+export interface DepositOptions {
+    subnet: string;
+    amount: number;
+}
+
+export interface WithdrawOptions {
+    subnet: string;
+    amount: number;
+}
 // Event types
 export type EventType = 'transfer' | 'deposit' | 'withdraw' | 'balance' | 'batch';
 

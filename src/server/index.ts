@@ -1,9 +1,9 @@
 import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData, fetchCallReadOnlyFunction, Cl, ClarityType } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
-import { BlazeMessage, createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
+import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
 import { SUBNETS } from '../shared/constants';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { Balance, TransferOptions, TransactionResult, Transfer, Status, BlazeEvent, BalanceOptions } from '../types';
+import type { Balance, TransferOptions, TransactionResult, Transfer, Status, BlazeEvent, BalanceOptions, BlazeMessage } from '../types';
 import { kv } from '@vercel/kv';
 import { config } from './config';
 
