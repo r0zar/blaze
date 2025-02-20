@@ -6,26 +6,27 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,
-  platform: 'neutral',
+  platform: 'browser',
   target: 'es2020',
-  external: [
+  noExternal: [
     '@stacks/connect',
     '@stacks/network',
     '@stacks/transactions',
-    'axios',
-    'fs',
-    'path',
-    'os',
-    'crypto',
-    'dotenv'
+    '@vercel/kv'
   ],
-  noExternal: ['@vercel/kv'],
+  external: [
+    'axios'
+  ],
   esbuildOptions(options) {
     options.define = {
-      ...options.define,
-      'global': 'globalThis'
+      'global': 'globalThis',
+      'process.env.NODE_ENV': '"production"'
     };
-    options.platform = 'neutral';
-    options.conditions = ['import', 'default'];
+    options.inject = [
+      // Inject polyfills for browser environment
+      'node_modules/tsup/assets/cjs_shims.js'
+    ];
+    options.mainFields = ['browser', 'module', 'main'];
+    options.conditions = ['browser', 'import', 'default'];
   }
 });

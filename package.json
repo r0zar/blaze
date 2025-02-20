@@ -26,19 +26,6 @@
       "require": "./dist/index.js"
     }
   },
-  "typesVersions": {
-    "*": {
-      "client": [
-        "./dist/client/index.d.ts"
-      ],
-      "server": [
-        "./dist/server/index.d.ts"
-      ],
-      "types": [
-        "./dist/types.d.ts"
-      ]
-    }
-  },
   "files": [
     "dist",
     "README.md"
