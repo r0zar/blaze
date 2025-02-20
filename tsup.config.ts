@@ -1,101 +1,49 @@
-import { defineConfig, Options } from 'tsup';
-import { readFileSync } from 'fs';
-
-// Read package.json for version and other metadata
-const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
-
-// Shared base configuration
-const baseConfig: Partial<Options> = {
-  clean: true,
-  dts: true,
-  format: ['cjs', 'esm'] as const,
-  minify: process.env.NODE_ENV === 'production',
-  sourcemap: true,
-  treeshake: true,
-  splitting: true,
-  tsconfig: './tsconfig.json',
-};
-
-// Environment-specific defines
-const defines = {
-  'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
-  'process.env.VERSION': JSON.stringify(pkg.version)
-};
-
-// Node.js built-in modules
-const nodeBuiltins = ['fs', 'path', 'os', 'crypto'];
+import { defineConfig } from 'tsup';
 
 export default defineConfig([
-  // Shared/core package
+  // Client build
   {
-    ...baseConfig,
-    entry: ['src/index.ts'],
-    outDir: 'dist',
-    platform: 'node',
-    external: [
-      ...nodeBuiltins,
-      '@stacks/connect',
-      '@stacks/network',
-      '@stacks/transactions',
-      'axios',
-      'dotenv',
-      '@vercel/kv',
-    ],
-    esbuildOptions(options) {
-      options.define = {
-        ...defines,
-      };
-    },
-    onSuccess: 'tsc --emitDeclarationOnly --declaration',
-  },
-
-  // Client-specific build
-  {
-    ...baseConfig,
-    entry: {
-      index: 'src/client/index.ts',
-    },
+    entry: ['src/client/index.ts'],
     outDir: 'dist/client',
+    format: ['esm', 'cjs'],
+    dts: true,
+    clean: true,
     platform: 'browser',
-    target: ['es2020'],
+    target: 'es2020',
     external: [
-      ...nodeBuiltins,
       '@stacks/connect',
       '@stacks/network',
       '@stacks/transactions',
-      'axios',
-      'dotenv',
+      'axios'
     ],
     esbuildOptions(options) {
       options.define = {
-        ...defines,
         'process.env.BROWSER': 'true',
-        'global': 'window',
+        'global': 'window'
       };
     },
-    inject: ['src/client/use-client.ts'],
+    inject: ['src/client/use-client.ts']
   },
 
-  // Server-specific build
+  // Server build
   {
-    ...baseConfig,
     entry: ['src/server/index.ts'],
     outDir: 'dist/server',
+    format: ['esm', 'cjs'],
+    dts: true,
+    clean: true,
     platform: 'node',
-    target: ['node16'],
+    target: 'node18',
     external: [
-      '@vercel/kv',
       '@stacks/network',
       '@stacks/transactions',
       'axios',
+      '@vercel/kv'
     ],
     esbuildOptions(options) {
       options.define = {
-        ...defines,
-        'process.env.BROWSER': 'false',
-        'process.env.PRIVATE_KEY': 'process.env.PRIVATE_KEY',
+        'process.env.BROWSER': 'false'
       };
-    },
-    noExternal: ['@stacks/connect', 'dotenv'],
+    }
   }
 ]);
