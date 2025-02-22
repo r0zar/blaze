@@ -1,34 +1,30 @@
-import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData, fetchCallReadOnlyFunction, Cl, ClarityType } from '@stacks/transactions';
+import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData, fetchCallReadOnlyFunction, Cl, ClarityType, createContractCallPayload, PostCondition } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
-import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
-import { SUBNETS } from '../shared/constants';
+import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
+import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { Balance, TransferOptions, TransactionResult, Transfer, Status, BlazeEvent, BalanceOptions, BlazeMessage } from '../types';
+import type { Balance, TransferOptions, TransactionResult, Transfer, Status, BlazeEvent, BalanceOptions, BlazeMessage, TxRequest } from '../types';
 import { kv } from '@vercel/kv';
-import { config } from './config';
 
 export class Subnet {
-    private subnet: string;
-    private tokenIdentifier: string;
-    private signer: string;
-    private queue: Transfer[];
-    private lastProcessedBlock: number;
-    private eventClients: Map<string, Set<(event: BlazeEvent) => void>> = new Map();
-    private config = config;
+    subnet: string;
+    tokenIdentifier: string;
+    signer: string;
+    queue: Transaction[];
+    lastProcessedBlock: number;
+    eventClients: Map<string, Set<(event: BlazeEvent) => void>> = new Map();
+    privateKey: string | undefined;
+    balances: Map<string, number> = new Map();
 
-    constructor(subnet: string, signer: string) {
-        this.signer = signer;
+    constructor() {
+        this.signer = '';
         this.queue = [];
-        this.lastProcessedBlock = 0;
+        this.lastProcessedBlock = 0
+        this.subnet = WELSH;
 
-        if (!subnet) {
-            throw new Error('Subnet contract address is required');
-        }
-        this.subnet = subnet;
-
-        this.tokenIdentifier = SUBNETS[subnet as keyof typeof SUBNETS];
+        this.tokenIdentifier = subnetTokens[this.subnet as keyof typeof subnetTokens];
         if (!this.tokenIdentifier) {
-            throw new Error(`No token identifier found for subnet: ${subnet}`);
+            throw new Error(`No token identifier found for subnet: ${this.subnet}`);
         }
     }
 
@@ -61,9 +57,9 @@ export class Subnet {
 
     public getStatus(): Status {
         return {
-            contracts: [this.subnet],
-            queueSizes: { [this.subnet]: this.queue.length },
-            lastProcessedBlock: this.lastProcessedBlock
+            subnet: this.subnet,
+            txQueue: this.queue,
+            lastProcessedBlock: this.lastProcessedBlock,
         };
     }
 
@@ -86,7 +82,12 @@ export class Subnet {
                 network: STACKS_MAINNET,
                 senderAddress: user
             });
-            return result.type === ClarityType.UInt ? Number(result.value) : 0;
+            const balance = result.type === ClarityType.UInt ? Number(result.value) : 0;
+
+            // Store the confirmed balance in our Map
+            this.balances.set(user, balance);
+
+            return balance;
         } catch (error) {
             console.error('Failed to fetch contract balance:', error);
             return 0;
@@ -116,6 +117,25 @@ export class Subnet {
     private async getUnconfirmedBalance(user: string): Promise<number> {
         const key = this.getBalanceKey('unconfirmed', user);
         return await kv.get<number>(key) ?? 0;
+    }
+
+    // get all balances
+    getBalances() {
+        // Create a new Map to store the final balances
+        const pendingBalances = new Map(this.balances);
+
+        // Apply pending transactions from the queue
+        this.queue.forEach(tx => {
+            // Deduct from sender
+            const senderBalance = pendingBalances.get(tx.transfer.signer) ?? 0;
+            pendingBalances.set(tx.transfer.signer, senderBalance - tx.transfer.amount);
+
+            // Add to recipient
+            const recipientBalance = pendingBalances.get(tx.transfer.to) ?? 0;
+            pendingBalances.set(tx.transfer.to, recipientBalance + tx.transfer.amount);
+        });
+
+        return Object.fromEntries(pendingBalances);
     }
 
     /**
@@ -299,13 +319,13 @@ export class Subnet {
     }
 
     private async executeTransaction(txOptions: any): Promise<TransactionResult> {
-        if (!this.config.privateKey) {
+        if (!this.privateKey) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
 
         const transaction = await makeContractCall({
             ...txOptions,
-            senderKey: this.config.privateKey,
+            senderKey: this.privateKey,
             network: STACKS_MAINNET,
         });
 
@@ -318,49 +338,49 @@ export class Subnet {
         return { txid: response.txid };
     }
 
-    async transfer(options: TransferOptions) {
-        const nextNonce = Date.now();
-        const tokens = options.amount;
+    // async transfer(options: TransferOptions) {
+    //     const nextNonce = Date.now();
+    //     const tokens = options.amount;
 
-        if (!this.config.privateKey) {
-            throw new Error('PRIVATE_KEY environment variable not set');
-        }
+    //     if (!this.privateKey) {
+    //         throw new Error('PRIVATE_KEY environment variable not set');
+    //     }
 
-        const signature = await this.generateSignature({
-            to: options.to,
-            amount: tokens,
-            nonce: nextNonce
-        });
+    //     const signature = await this.generateSignature({
+    //         to: options.to,
+    //         amount: tokens,
+    //         nonce: nextNonce
+    //     });
 
-        const transfer: Transfer = {
-            signature,
-            signer: this.signer,
-            to: options.to,
-            amount: tokens,
-            nonce: nextNonce,
-        };
+    //     const transfer: Transfer = {
+    //         signature,
+    //         signer: this.signer,
+    //         to: options.to,
+    //         amount: tokens,
+    //         nonce: nextNonce,
+    //     };
 
-        this.emitEvent({
-            type: 'transfer',
-            contract: this.subnet,
-            data: {
-                from: this.signer,
-                to: options.to,
-                amount: tokens,
-                status: 'pending',
-                timestamp: Date.now()
-            }
-        });
+    //     this.emitEvent({
+    //         type: 'transfer',
+    //         contract: this.subnet,
+    //         data: {
+    //             from: this.signer,
+    //             to: options.to,
+    //             amount: tokens,
+    //             status: 'pending',
+    //             timestamp: Date.now()
+    //         }
+    //     });
 
-        await this.addTransferToQueue(transfer);
+    //     await this.addTransferToQueue(transfer);
 
-        // Check if we should process the batch
-        if (this.shouldProcessBatch()) {
-            return this.processTransfers();
-        }
+    //     // Check if we should process the batch
+    //     if (this.shouldProcessBatch()) {
+    //         return this.processTransfers();
+    //     }
 
-        return { queued: true, queueSize: this.queue.length };
-    }
+    //     return { queued: true, queueSize: this.queue.length };
+    // }
 
     private shouldProcessBatch(): boolean {
         // Add your batch processing logic here
@@ -395,151 +415,175 @@ export class Subnet {
         });
     }
 
-    /**
-     * Convert unconfirmed balance to confirmed balance
-     * This should be called when a transaction is confirmed on-chain
-     */
-    private async confirmBalanceChange(user: string, amount: number): Promise<void> {
-        const confirmedKey = this.getBalanceKey('confirmed', user);
-        const unconfirmedKey = this.getBalanceKey('unconfirmed', user);
-
-        const [currentConfirmed, currentUnconfirmed] = await Promise.all([
-            kv.get<number>(confirmedKey),
-            kv.get<number>(unconfirmedKey)
-        ]);
-
-        // Move the amount from unconfirmed to confirmed
-        await Promise.all([
-            kv.set(confirmedKey, (currentConfirmed ?? 0) + amount),
-            kv.set(unconfirmedKey, (currentUnconfirmed ?? 0) - amount)
-        ]);
-
-        // Emit updated balance
-        await this.getBalance(user);
+    public async processTxRequest(txRequest: Transfer) {
+        // create a new Transaction object and put it in the queue
+        const transaction = new Transaction(txRequest);
+        this.queue.push(transaction);
     }
 
-    /**
-     * Verify and reconcile balances with on-chain state
-     */
-    private async reconcileBalance(user: string): Promise<void> {
-        const contractBalance = await this.fetchContractBalance(user);
-        const confirmedKey = this.getBalanceKey('confirmed', user);
+    public async settleTransactions(batchSize?: number) {
+        // Don't process if queue is empty
+        if (this.queue.length === 0) return;
 
-        // Update confirmed balance to match contract
-        await kv.set(confirmedKey, contractBalance);
-
-        // Emit updated balance
-        await this.getBalance(user);
-    }
-
-    public async addTransferToQueue(transfer: Transfer): Promise<void> {
-        // Validate transfer including signature verification
-        await this.validateTransferOperation(transfer);
-
-        // Verify balances
-        const balances = await this.getBalance(transfer.signer);
-        if ((balances.confirmed ?? 0) + (balances.unconfirmed ?? 0) < transfer.amount) {
-            this.emitEvent({
-                type: 'transfer',
-                contract: this.subnet,
-                data: {
-                    from: transfer.signer,
-                    to: transfer.to,
-                    amount: transfer.amount,
-                    status: 'failed',
-                    error: 'Insufficient balance',
-                    timestamp: Date.now()
-                }
-            });
-            throw new Error('Insufficient balance');
+        // Get contract details from subnet identifier (e.g. "ST1234.my-contract")
+        const [contractAddress, contractName] = this.subnet.split('.');
+        if (!contractAddress || !contractName) {
+            throw new Error('Invalid contract format');
         }
 
-        // Apply unconfirmed changes immediately
-        await Promise.all([
-            this.applyUnconfirmedChange(transfer.signer, -transfer.amount, 'transfer'),
-            this.applyUnconfirmedChange(transfer.to, transfer.amount, 'transfer')
-        ]);
+        // NOTE: this is a potential future batch transaction format
+        // const clarityOperations = this.queue.map(op => {
+        //     return Cl.tuple({
+        //         seal: Cl.tuple({
+        //             signature: Cl.bufferFromHex(op.txRequest.signature),
+        //             nonce: Cl.uint(op.txRequest.nonce),
+        //         }),
+        //         function: Cl.tuple({
+        //             name: Cl.stringAscii(op.txRequest.function.name),
+        //             args: Cl.list(op.txRequest.function.args.map(arg => Cl.stringAscii(arg))),
+        //         }),
+        //     });
+        // });
 
-        // Add to queue
-        this.queue.push(transfer);
-        console.log('Added transfer to queue:', transfer);
-    }
+        // const clarityOperations = this.queue.map(op => {
+        //     return Cl.tuple({
+        //         signature: Cl.bufferFromHex(op.transfer.signature),
+        //         signer: Cl.principal(op.transfer.signer),
+        //         to: Cl.principal(op.transfer.to),
+        //         amount: Cl.uint(op.transfer.amount),
+        //         nonce: Cl.uint(op.transfer.nonce),
+        //     });
+        // });
 
-    public async processTransfers(): Promise<TransactionResult | void> {
-        if (!this.config.privateKey) {
-            throw new Error('PRIVATE_KEY environment variable not set');
+        // Get the transactions that will be settled
+        // if no batch size is provided, settle oldest 200 transactions
+        const txsToSettle = batchSize ? this.queue.splice(0, batchSize) : this.queue.splice(0, 200);
+
+        // Apply balance changes from settled transactions
+        for (const tx of txsToSettle) {
+            // Deduct from sender
+            const senderBalance = this.balances.get(tx.transfer.signer) || 0;
+            this.balances.set(tx.transfer.signer, senderBalance - tx.transfer.amount);
+
+            // Add to receiver
+            const receiverBalance = this.balances.get(tx.transfer.to) || 0;
+            this.balances.set(tx.transfer.to, receiverBalance + tx.transfer.amount);
         }
 
-        const queueLength = this.queue.length;
-        if (queueLength === 0) return;
-
-        console.log('Processing transfers:', queueLength);
-
-        this.emitEvent({
-            type: 'batch',
-            contract: this.subnet,
-            data: {
-                status: 'processing',
-                timestamp: Date.now()
-            }
-        });
-
-        try {
-            await Promise.all(this.queue.map(transfer => this.validateTransferOperation(transfer)));
-
-            const txOptions = this.buildBatchTransferTxOptions(this.queue);
-            const result = await this.executeTransaction(txOptions);
-
-            // Emit events for each transfer in the batch
-            this.queue.forEach(transfer => {
-                this.emitEvent({
-                    type: 'transfer',
-                    contract: this.subnet,
-                    data: {
-                        from: transfer.signer,
-                        to: transfer.to,
-                        amount: transfer.amount,
-                        status: 'completed',
-                        txid: result.txid,
-                        timestamp: Date.now()
-                    }
-                });
-            });
-
-            // Clear the processed transfers from the queue
-            this.queue.splice(0, queueLength);
-
-            this.emitEvent({
-                type: 'batch',
-                contract: this.subnet,
-                data: {
-                    status: 'completed',
-                    txid: result.txid,
-                    timestamp: Date.now()
-                }
-            });
-
-            return result;
-        } catch (error) {
-            // On failure, reconcile all affected balances
-            await Promise.all(
-                [...new Set(this.queue.flatMap(t => [t.signer, t.to]))].map(
-                    user => this.reconcileBalance(user)
-                )
-            );
-
-            this.emitEvent({
-                type: 'batch',
-                contract: this.subnet,
-                data: {
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    timestamp: Date.now()
-                }
-            });
-            throw error;
-        }
+        // return {
+        //     contractAddress,
+        //     contractName,
+        //     functionName: `batch-transfer`,
+        //     functionArgs: [Cl.list(clarityOperations)],
+        //     senderKey: this.privateKey!,
+        //     network: STACKS_MAINNET,
+        //     fee: 1800
+        // };
     }
+
+    // public async addTransferToQueue(transfer: Transfer): Promise<void> {
+    //     // Validate transfer including signature verification
+    //     await this.validateTransferOperation(transfer);
+
+    //     // Verify balances
+    //     const balances = await this.getBalance(transfer.signer);
+    //     if ((balances.confirmed ?? 0) + (balances.unconfirmed ?? 0) < transfer.amount) {
+    //         this.emitEvent({
+    //             type: 'transfer',
+    //             contract: this.subnet,
+    //             data: {
+    //                 from: transfer.signer,
+    //                 to: transfer.to,
+    //                 amount: transfer.amount,
+    //                 status: 'failed',
+    //                 error: 'Insufficient balance',
+    //                 timestamp: Date.now()
+    //             }
+    //         });
+    //         throw new Error('Insufficient balance');
+    //     }
+
+    //     // Apply unconfirmed changes immediately
+    //     await Promise.all([
+    //         this.applyUnconfirmedChange(transfer.signer, -transfer.amount, 'transfer'),
+    //         this.applyUnconfirmedChange(transfer.to, transfer.amount, 'transfer')
+    //     ]);
+
+    //     // Add to queue
+    //     this.queue.push(transfer);
+    //     console.log('Added transfer to queue:', transfer);
+    // }
+
+    // public async processTransfers(): Promise<TransactionResult | void> {
+    //     if (!this.privateKey) {
+    //         throw new Error('PRIVATE_KEY environment variable not set');
+    //     }
+
+    //     const queueLength = this.queue.length;
+    //     if (queueLength === 0) return;
+
+    //     console.log('Processing transfers:', queueLength);
+
+    //     this.emitEvent({
+    //         type: 'batch',
+    //         contract: this.subnet,
+    //         data: {
+    //             status: 'processing',
+    //             timestamp: Date.now()
+    //         }
+    //     });
+
+    //     try {
+    //         await Promise.all(this.queue.map(transfer => this.validateTransferOperation(transfer)));
+
+    //         const txOptions = this.buildBatchTransferTxOptions(this.queue);
+    //         const result = await this.executeTransaction(txOptions);
+
+    //         // Emit events for each transfer in the batch
+    //         this.queue.forEach(transfer => {
+    //             this.emitEvent({
+    //                 type: 'transfer',
+    //                 contract: this.subnet,
+    //                 data: {
+    //                     from: transfer.signer,
+    //                     to: transfer.to,
+    //                     amount: transfer.amount,
+    //                     status: 'completed',
+    //                     txid: result.txid,
+    //                     timestamp: Date.now()
+    //                 }
+    //             });
+    //         });
+
+    //         // Clear the processed transfers from the queue
+    //         this.queue.splice(0, queueLength);
+
+    //         this.emitEvent({
+    //             type: 'batch',
+    //             contract: this.subnet,
+    //             data: {
+    //                 status: 'completed',
+    //                 txid: result.txid,
+    //                 timestamp: Date.now()
+    //             }
+    //         });
+
+    //         return result;
+    //     } catch (error) {
+    //         console.error('Error processing transfers:', error);
+
+    //         this.emitEvent({
+    //             type: 'batch',
+    //             contract: this.subnet,
+    //             data: {
+    //                 status: 'failed',
+    //                 error: error instanceof Error ? error.message : 'Unknown error',
+    //                 timestamp: Date.now()
+    //             }
+    //         });
+    //         throw error;
+    //     }
+    // }
 
     async deposit(amount: number) {
         this.emitEvent({
@@ -558,8 +602,9 @@ export class Subnet {
             await this.applyUnconfirmedChange(this.signer, amount, 'deposit');
 
             const txOptions = buildDepositTxOptions({
+                signer: this.signer,
                 subnet: this.subnet,
-                amount
+                amount,
             });
 
             const result = await this.executeTransaction(txOptions);
@@ -578,9 +623,6 @@ export class Subnet {
 
             return result;
         } catch (error) {
-            // On failure, reconcile balance with contract
-            await this.reconcileBalance(this.signer);
-
             this.emitEvent({
                 type: 'deposit',
                 contract: this.subnet,
@@ -633,9 +675,6 @@ export class Subnet {
 
             return result;
         } catch (error) {
-            // On failure, reconcile balance with contract
-            await this.reconcileBalance(this.signer);
-
             this.emitEvent({
                 type: 'withdraw',
                 contract: this.subnet,
@@ -658,7 +697,7 @@ export class Subnet {
         const signature = await signStructuredData({
             message: clarityMessage,
             domain,
-            privateKey: this.config.privateKey!
+            privateKey: this.privateKey!
         });
 
         return signature;
@@ -731,9 +770,54 @@ export class Subnet {
             contractName,
             functionName: 'batch-transfer',
             functionArgs: [Cl.list(clarityOperations)],
-            senderKey: this.config.privateKey!,
+            senderKey: this.privateKey!,
             network: STACKS_MAINNET,
             fee: 1800
         };
     }
+}
+
+export class Transaction {
+    constructor(public transfer: Transfer) {
+        console.log('New transaction:', transfer);
+    }
+
+    // this transaction has a few important roles it plays
+
+    // most importantly, it represents a possible future transaction
+    // this is helpful because until transactions are processed, they are not valid
+    // and until it is valid, we cant assume it will be added to a block
+    // but we still want to show users any possible balances that they would have
+    // if the transaction were to be added to a block
+
+    // so while it remains in the queue, it is a promise of a future transaction
+    // and we can use it to show users possible balances
+
+    // secondly, it represents a transfer operation, so when we do process the queue
+    // we can use this object to create a valid contract call to the batch-X function
+
+    // each blaze-wrapped contract will have a different set of functions
+    // but generally speaking, most public functions will have a public-<signed> counterpart
+    // which is the function that is called when a user sends a tx to the contract
+
+    // for example, fungible tokens will have a transfer-signed function
+    // which will transfer the tokens from the signer to the recipient
+    // a nft contract will have a transfer-signed function and a mint-signed function
+    // a dex pool will have a swap-signed function and so on and so forth
+
+    // so when we process the queue, we can use this object to create a valid contract call
+    // to the batch-X function
+
+    // this is important because it allows us to show users possible balances
+    // and it allows us to process transactions in a safe and secure way
+
+    // when transactions are processed, these objects are removed from the queue
+    // so either they are removed from the queue and confirm on-chain, in which case
+    // the users future balance settles to their confirmed balance (no visual change)
+    // or its removed from the queue and does not confirm on-chain, in which case
+    // the users future balance is updated to reflect the new unconfirmed balance
+
+    // so in the case that a transaction fails, this removing from the queue is a natural
+    // rollback mechanism, and the users future balance is updated to reflect the new unconfirmed balance
+
 }

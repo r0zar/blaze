@@ -1,23 +1,11 @@
 import { STACKS_MAINNET } from '@stacks/network';
-import { openStructuredDataSignatureRequestPopup, showConnect, FinishedAuthData } from '@stacks/connect';
-import { createBlazeDomain, createBlazeMessage } from '../shared/structured-data';
-import { SUBNETS } from '../shared/constants';
+import { openStructuredDataSignatureRequestPopup, showConnect, FinishedAuthData, getOrCreateUserSession } from '@stacks/connect';
+import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
+import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
 import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription, FinishedTxData } from '../types';
 import { isBrowser, BrowserFeatures, MockEventSource } from '../shared/utils';
 import axios from 'axios';
-
-// Re-export types that consumers might need
-export type {
-    Balance,
-    BalanceOptions,
-    TransferOptions,
-    Transfer,
-    BlazeEvent,
-    EventType,
-    EventSubscription,
-    FinishedTxData
-};
 
 const HEARTBEAT_INTERVAL = 5000; // 5 seconds
 const MAX_RETRY_DELAY = 32000; // Max retry delay of 32 seconds
@@ -28,33 +16,27 @@ const EventSourceImpl = isBrowser && BrowserFeatures.hasEventSource
     : MockEventSource;
 
 export class Blaze {
-    private subnet: string;
-    private tokenIdentifier: string;
-    private signer: string;
-    private nodeUrl: string;
-    private eventSource: InstanceType<typeof EventSourceImpl> | null = null;
-    private eventHandlers: Map<EventType, Set<(event: BlazeEvent) => void>> = new Map();
-    private lastBalance: Balance = { total: 0 };
-    private retryCount = 0;
-    private heartbeatTimeout: NodeJS.Timeout | null = null;
-    private lastBalanceUpdate: number = 0;
-    private walletConnected: boolean = false;
-    private onWalletStateChange?: (connected: boolean) => void;
-    private isServerSide: boolean;
+    subnet: string;
+    tokenIdentifier: string;
+    signer: string;
+    nodeUrl: string;
+    eventSource: InstanceType<typeof EventSourceImpl> | null = null;
+    eventHandlers: Map<EventType, Set<(event: BlazeEvent) => void>> = new Map();
+    lastBalance: Balance = { total: 0 };
+    retryCount = 0;
+    heartbeatTimeout: NodeJS.Timeout | null = null;
+    lastBalanceUpdate: number = 0;
+    isServerSide: boolean;
 
-    constructor(subnet: string, signer: string, nodeUrl: string = 'https://charisma.rocks/api/v0/blaze') {
-        this.signer = signer;
-        this.nodeUrl = nodeUrl;
+    constructor() {
+        this.signer = '';
+        this.nodeUrl = 'https://charisma.rocks/api/v0/blaze';
         this.isServerSide = !isBrowser;
+        this.subnet = WELSH;
 
-        if (!subnet) {
-            throw new Error('Subnet contract address is required');
-        }
-        this.subnet = subnet;
-
-        this.tokenIdentifier = SUBNETS[subnet as keyof typeof SUBNETS];
+        this.tokenIdentifier = subnetTokens[this.subnet as keyof typeof subnetTokens];
         if (!this.tokenIdentifier) {
-            throw new Error(`No token identifier found for subnet: ${subnet}`);
+            throw new Error(`No token identifier found for subnet: ${this.subnet}`);
         }
 
         // Initialize event handlers for each event type
@@ -64,20 +46,14 @@ export class Blaze {
 
         // Warn if running in server environment
         if (this.isServerSide) {
-            console.warn('Blaze client is running in a server environment. Some features may be limited.');
+            console.warn('Blaze client was initialized in a server environment. Some features may be limited.');
         }
     }
 
-    // Add wallet state change listener
-    public onWalletChange(callback: (connected: boolean) => void) {
-        this.onWalletStateChange = callback;
-    }
-
     // Connect wallet
-    public async connectWallet(): Promise<{ address: string } | null> {
-        if (this.isServerSide) {
-            console.warn('Wallet connections are not supported in server environment');
-            return null;
+    public async connectWallet(): Promise<string> {
+        if (getOrCreateUserSession().isUserSignedIn()) {
+            return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet;
         }
 
         try {
@@ -88,30 +64,23 @@ export class Blaze {
                         icon: 'https://charisma.rocks/charisma.png',
                     },
                     onFinish: (data: FinishedAuthData) => {
-                        this.walletConnected = true;
                         this.signer = data.userSession.loadUserData().profile.stxAddress.mainnet;
-                        this.onWalletStateChange?.(true);
-                        resolve({ address: data.userSession.loadUserData().profile.stxAddress.mainnet });
+                        resolve(data.userSession.loadUserData().profile.stxAddress.mainnet);
                     },
                     onCancel: () => {
-                        this.walletConnected = false;
-                        this.onWalletStateChange?.(false);
-                        resolve(null);
+                        resolve('');
                     },
                     userSession: undefined,
                 });
             });
         } catch (error) {
             console.error('Error connecting wallet:', error);
-            this.walletConnected = false;
-            this.onWalletStateChange?.(false);
-            return null;
+            return '';
         }
     }
 
     // Disconnect wallet
     public disconnectWallet() {
-        this.walletConnected = false;
         this.signer = '';
         // Clean up any existing subscriptions
         this.eventSource?.close();
@@ -123,21 +92,23 @@ export class Blaze {
         // Reset balance
         this.lastBalance = { total: 0 };
         this.lastBalanceUpdate = 0;
-        // Notify about wallet state change
-        this.onWalletStateChange?.(false);
     }
 
     // Check if wallet is connected
     public isWalletConnected(): boolean {
-        return this.walletConnected;
+        return getOrCreateUserSession().isUserSignedIn()
     }
 
     // Get current wallet address
     public getWalletAddress(): string {
-        return this.signer;
+        return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet
     }
 
-    private connectEventSource() {
+    private async connectEventSource() {
+        if (!this.signer) {
+            this.signer = await this.connectWallet();
+        }
+
         if (this.isServerSide) {
             console.warn('EventSource connections are not supported in server environment');
             return;
@@ -256,6 +227,9 @@ export class Blaze {
     }
 
     async getBalance(options?: BalanceOptions): Promise<Balance> {
+        if (!this.signer) {
+            this.signer = await this.connectWallet();
+        }
         // If we have a recent balance update (within last 5 seconds) and it matches the requested options
         const BALANCE_FRESHNESS_MS = 5000; // 5 seconds
         const isCachedBalanceFresh = (Date.now() - this.lastBalanceUpdate) < BALANCE_FRESHNESS_MS;
@@ -290,6 +264,10 @@ export class Blaze {
     }
 
     async transfer(options: TransferOptions) {
+        if (!this.signer) {
+            this.signer = await this.connectWallet();
+        }
+
         const nextNonce = Date.now();
         const tokens = options.amount;
 
@@ -331,7 +309,11 @@ export class Blaze {
     }
 
     async deposit(amount: number) {
-        const txOptions = buildDepositTxOptions({ subnet: this.subnet, amount });
+        if (!this.signer) {
+            this.signer = await this.connectWallet();
+        }
+
+        const txOptions = buildDepositTxOptions({ subnet: this.subnet, amount, signer: this.signer });
 
         const { showContractCall } = await import("@stacks/connect");
         const result = await new Promise<FinishedTxData | null>((resolve) => {
@@ -358,6 +340,10 @@ export class Blaze {
     }
 
     async withdraw(amount: number) {
+        if (!this.signer) {
+            this.signer = await this.connectWallet();
+        }
+
         const txOptions = buildWithdrawTxOptions({ subnet: this.subnet, amount });
 
         const { showContractCall } = await import("@stacks/connect");

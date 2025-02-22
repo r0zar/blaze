@@ -1,18 +1,8 @@
+import { Blaze } from './client';
+
 export * from './client';
 export * from './server';
-export * from './shared/constants';
+export * from './shared/utils';
 export * from './types';
 
-export { Blaze } from './client';
-
-// Re-export commonly used types for convenience
-export type {
-    Balance,
-    BalanceOptions,
-    TransferOptions,
-    Transfer,
-    BlazeEvent,
-    EventType,
-    EventSubscription,
-    FinishedTxData
-} from './types';
+export default new Blaze();

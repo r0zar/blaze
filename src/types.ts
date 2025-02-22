@@ -1,3 +1,6 @@
+import { PostCondition } from "@stacks/transactions";
+import { Transaction } from "./server";
+
 // Core types
 export interface Balance {
     total: number;
@@ -13,6 +16,16 @@ export interface BalanceOptions {
 export interface TransferOptions {
     to: string;
     amount: number;
+}
+
+export interface TxRequest {
+    conditions: PostCondition[],
+    function: {
+        name: string,
+        args: string[],
+    },
+    nonce: number;
+    signature: string;
 }
 
 export interface Transfer {
@@ -32,8 +45,8 @@ export interface TransactionResult {
 }
 
 export interface Status {
-    contracts: string[];
-    queueSizes: { [contract: string]: number };
+    subnet: string;
+    txQueue: Transaction[];
     lastProcessedBlock?: number;
 }
 
@@ -46,12 +59,18 @@ export interface BlazeMessage {
 export interface DepositOptions {
     subnet: string;
     amount: number;
+    signer: string;
 }
 
 export interface WithdrawOptions {
     subnet: string;
     amount: number;
 }
+
+export interface ServerConfig {
+    privateKey: string | undefined;
+}
+
 // Event types
 export type EventType = 'transfer' | 'deposit' | 'withdraw' | 'balance' | 'batch';
 
