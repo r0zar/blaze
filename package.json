@@ -1,6 +1,6 @@
 {
   "name": "blaze-sdk",
-  "version": "0.2.24",
+  "version": "0.3.0",
   "description": "A lightweight SDK for managing off-chain transfers with on-chain settlement for Stacks dapps",
   "repository": {
     "type": "git",
