@@ -1,5 +1,12 @@
 import { PostCondition } from "@stacks/transactions";
-import { Transaction } from "./server";
+
+// Transaction type definitions
+export enum TransactionType {
+    TRANSFER = 'transfer',
+    // Future transaction types
+    // MINT = 'mint',
+    // SWAP = 'swap',
+}
 
 // Core types
 export interface Balance {
@@ -46,7 +53,7 @@ export interface TransactionResult {
 
 export interface Status {
     subnet: string;
-    txQueue: Transaction[];
+    txQueue: any[]; // Using any instead of Transaction to avoid circular dependency
     lastProcessedBlock?: number;
 }
 
@@ -71,24 +78,10 @@ export interface ServerConfig {
     privateKey: string | undefined;
 }
 
-// Event types
-export type EventType = 'transfer' | 'deposit' | 'withdraw' | 'balance' | 'batch';
-
-export interface BlazeEvent {
-    type: EventType;
-    contract: string;
-    data: {
-        from?: string;
-        to?: string;
-        amount?: number;
-        txid?: string;
-        balance?: Balance;
-        status?: 'pending' | 'processing' | 'completed' | 'failed';
-        error?: string;
-        timestamp: number;
-    };
-}
-
-export interface EventSubscription {
-    unsubscribe: () => void;
+// Base transaction interfaces
+export interface BaseTransaction {
+    type: TransactionType;
+    affectedUsers: string[];
+    getBalanceChanges(): Map<string, number>;
+    toClarityValue(): any;
 } 

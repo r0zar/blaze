@@ -3,46 +3,39 @@ import { openStructuredDataSignatureRequestPopup, showConnect, FinishedAuthData,
 import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
 import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { Balance, BalanceOptions, TransferOptions, Transfer, BlazeEvent, EventType, EventSubscription, FinishedTxData } from '../types';
-import { isBrowser, BrowserFeatures, MockEventSource } from '../shared/utils';
+import type { TransferOptions, Transfer, FinishedTxData, TransactionResult } from '../types';
+import { isBrowser } from '../shared/utils';
 import axios from 'axios';
 
-const HEARTBEAT_INTERVAL = 5000; // 5 seconds
-const MAX_RETRY_DELAY = 32000; // Max retry delay of 32 seconds
-
-// Get the appropriate EventSource implementation
-const EventSourceImpl = isBrowser && BrowserFeatures.hasEventSource
-    ? window.EventSource
-    : MockEventSource;
-
+/**
+ * Blaze SDK client for interacting with Blaze subnets
+ * Handles wallet connections, balance queries, and transaction operations
+ */
 export class Blaze {
     subnet: string;
     tokenIdentifier: string;
     signer: string;
     nodeUrl: string;
-    eventSource: InstanceType<typeof EventSourceImpl> | null = null;
-    eventHandlers: Map<EventType, Set<(event: BlazeEvent) => void>> = new Map();
-    lastBalance: Balance = { total: 0 };
-    retryCount = 0;
-    heartbeatTimeout: NodeJS.Timeout | null = null;
-    lastBalanceUpdate: number = 0;
     isServerSide: boolean;
+    endpoints: {
+        transfer: string;
+        refresh: string;
+    };
 
-    constructor() {
+    constructor(options?: { nodeUrl?: string, subnet?: string }) {
         this.signer = '';
-        this.nodeUrl = 'https://charisma.rocks/api/v0/blaze';
+        this.nodeUrl = options?.nodeUrl || 'https://charisma.rocks/api/v0/blaze';
         this.isServerSide = !isBrowser;
-        this.subnet = WELSH;
+        this.subnet = options?.subnet || WELSH;
+        this.endpoints = {
+            transfer: `/api/process`,
+            refresh: `/api/refresh-balance`,
+        };
 
         this.tokenIdentifier = subnetTokens[this.subnet as keyof typeof subnetTokens];
         if (!this.tokenIdentifier) {
             throw new Error(`No token identifier found for subnet: ${this.subnet}`);
         }
-
-        // Initialize event handlers for each event type
-        ['transfer', 'deposit', 'withdraw', 'balance', 'batch'].forEach(type => {
-            this.eventHandlers.set(type as EventType, new Set());
-        });
 
         // Warn if running in server environment
         if (this.isServerSide) {
@@ -50,7 +43,10 @@ export class Blaze {
         }
     }
 
-    // Connect wallet
+    /**
+     * Connect to a wallet using Stacks Connect
+     * @returns Connected wallet address or empty string if connection failed
+     */
     public async connectWallet(): Promise<string> {
         if (getOrCreateUserSession().isUserSignedIn()) {
             return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet;
@@ -79,228 +75,97 @@ export class Blaze {
         }
     }
 
-    // Disconnect wallet
+    /**
+     * Disconnect current wallet
+     */
     public disconnectWallet() {
         this.signer = '';
-        // Clean up any existing subscriptions
-        this.eventSource?.close();
-        this.eventSource = null;
-        if (this.heartbeatTimeout) {
-            clearTimeout(this.heartbeatTimeout);
-            this.heartbeatTimeout = null;
-        }
-        // Reset balance
-        this.lastBalance = { total: 0 };
-        this.lastBalanceUpdate = 0;
     }
 
-    // Check if wallet is connected
+    /**
+     * Check if wallet is connected
+     * @returns True if wallet is connected
+     */
     public isWalletConnected(): boolean {
         return getOrCreateUserSession().isUserSignedIn()
     }
 
-    // Get current wallet address
+    /**
+     * Get current wallet address
+     * @returns Connected wallet address
+     */
     public getWalletAddress(): string {
         return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet
     }
 
-    private async connectEventSource() {
+    /**
+     * Get user's balance from the subnet
+     * @returns User balance as a number
+     */
+    async getBalance(): Promise<number> {
         if (!this.signer) {
             this.signer = await this.connectWallet();
         }
 
-        if (this.isServerSide) {
-            console.warn('EventSource connections are not supported in server environment');
-            return;
-        }
+        // Fetch from server
+        const response = await axios.get(`${this.nodeUrl}/subnets/${this.subnet}/balances/${this.signer}`);
 
-        if (this.eventSource?.readyState === EventSourceImpl.OPEN) {
-            return;
-        }
-
-        // Close existing connection if any
-        this.eventSource?.close();
-        this.eventSource = null;
-
-        // Clear existing heartbeat timeout
-        if (this.heartbeatTimeout) {
-            clearTimeout(this.heartbeatTimeout);
-            this.heartbeatTimeout = null;
-        }
-
-        const url = new URL(`${this.nodeUrl}/subnets/${this.subnet}/events`);
-        url.searchParams.set('signer', this.signer);
-
-        this.eventSource = new EventSourceImpl(url.toString());
-
-        this.eventSource.onmessage = (event: any) => {
-            try {
-                if (event.data === 'heartbeat') {
-                    this.handleHeartbeat();
-                    return;
-                }
-
-                const blazeEvent: BlazeEvent = JSON.parse(event.data);
-                this.handleEvent(blazeEvent);
-
-                // Reset retry count on successful message
-                this.retryCount = 0;
-            } catch (error) {
-                console.error('Error parsing event:', error);
-            }
-        };
-
-        this.eventSource.onerror = (error: any) => {
-            console.error('EventSource error:', error);
-            this.eventSource?.close();
-            this.eventSource = null;
-
-            // Clear heartbeat timeout
-            if (this.heartbeatTimeout) {
-                clearTimeout(this.heartbeatTimeout);
-                this.heartbeatTimeout = null;
-            }
-
-            // Attempt to reconnect with exponential backoff
-            const delay = Math.min(1000 * Math.pow(2, this.retryCount), MAX_RETRY_DELAY);
-            this.retryCount++;
-            setTimeout(() => this.connectEventSource(), delay);
-        };
-
-        // Set initial heartbeat timeout
-        this.resetHeartbeatTimeout();
+        // Return just the numeric balance value
+        return response.data.total || 0;
     }
 
-    private handleHeartbeat() {
-        // Reset the heartbeat timeout
-        this.resetHeartbeatTimeout();
-    }
-
-    private resetHeartbeatTimeout() {
-        if (this.heartbeatTimeout) {
-            clearTimeout(this.heartbeatTimeout);
-        }
-
-        this.heartbeatTimeout = setTimeout(() => {
-            console.warn('Heartbeat timeout, reconnecting...');
-            this.eventSource?.close();
-            this.connectEventSource();
-        }, HEARTBEAT_INTERVAL * 2); // Double the heartbeat interval for timeout
-    }
-
-    private handleEvent(event: BlazeEvent) {
-        const handlers = this.eventHandlers.get(event.type);
-        if (handlers) {
-            handlers.forEach(handler => handler(event));
-        }
-
-        // Update local balance state if event contains balance info
-        if (event.data.balance) {
-            this.lastBalance = event.data.balance;
-            this.lastBalanceUpdate = Date.now();
-        }
-    }
-
-    public subscribe(type: EventType, handler: (event: BlazeEvent) => void): EventSubscription {
-        const handlers = this.eventHandlers.get(type);
-        if (!handlers) {
-            throw new Error(`Invalid event type: ${type}`);
-        }
-
-        handlers.add(handler);
-        this.connectEventSource();
-
-        return {
-            unsubscribe: () => {
-                handlers.delete(handler);
-                // If no more handlers for any event type, close the connection
-                if ([...this.eventHandlers.values()].every(set => set.size === 0)) {
-                    if (this.heartbeatTimeout) {
-                        clearTimeout(this.heartbeatTimeout);
-                        this.heartbeatTimeout = null;
-                    }
-                    this.eventSource?.close();
-                    this.eventSource = null;
-                }
-            }
-        };
-    }
-
-    async getBalance(options?: BalanceOptions): Promise<Balance> {
+    /**
+     * Refresh balance from server - fetches the latest on-chain balance
+     * @returns Updated balance as a number
+     */
+    async refreshBalance(): Promise<number> {
         if (!this.signer) {
             this.signer = await this.connectWallet();
         }
-        // If we have a recent balance update (within last 5 seconds) and it matches the requested options
-        const BALANCE_FRESHNESS_MS = 5000; // 5 seconds
-        const isCachedBalanceFresh = (Date.now() - this.lastBalanceUpdate) < BALANCE_FRESHNESS_MS;
 
-        if (isCachedBalanceFresh) {
-            const hasConfirmed = this.lastBalance.confirmed !== undefined;
-            const hasUnconfirmed = this.lastBalance.unconfirmed !== undefined;
-            const wantsConfirmed = options?.includeConfirmed ?? false;
-            const wantsUnconfirmed = options?.includeUnconfirmed ?? false;
-
-            // If we have what they want in cache, use it
-            if ((!wantsConfirmed || hasConfirmed) && (!wantsUnconfirmed || hasUnconfirmed)) {
-                const result: Balance = { total: this.lastBalance.total };
-                if (wantsConfirmed && hasConfirmed) {
-                    result.confirmed = this.lastBalance.confirmed;
-                }
-                if (wantsUnconfirmed && hasUnconfirmed) {
-                    result.unconfirmed = this.lastBalance.unconfirmed;
-                }
-                return result;
-            }
-        }
-
-        // Otherwise fetch from server
-        const response = await axios.get(`${this.nodeUrl}/subnets/${this.subnet}/balances/${this.signer}`, {
-            params: options
+        // Request the server to refresh the on-chain balance first
+        await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/refresh-balance`, {
+            user: this.signer
         });
-        const balance = response.data as Balance;
-        this.lastBalance = balance;
-        this.lastBalanceUpdate = Date.now();
-        return balance;
+
+        // Then get the updated balance
+        return this.getBalance();
     }
 
+    /**
+     * Transfer tokens to another address
+     * Creates a signed transfer and sends it to the server
+     * @param options Transfer options including recipient and amount
+     * @returns Transaction result
+     */
     async transfer(options: TransferOptions) {
         if (!this.signer) {
             this.signer = await this.connectWallet();
         }
 
         const nextNonce = Date.now();
-        const tokens = options.amount;
-
-        const domain = createBlazeDomain();
-        const message = createBlazeMessage({
-            to: options.to,
-            amount: tokens,
-            nonce: nextNonce
-        });
-
         const result: any = await new Promise((resolve) => {
             openStructuredDataSignatureRequestPopup({
-                domain,
-                message,
+                domain: createBlazeDomain(),
+                message: createBlazeMessage({ ...options, nonce: nextNonce }),
                 network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
                 onCancel: () => resolve(null)
             });
         });
 
-        if (!result?.signature) throw new Error('User cancelled or signing failed');
+        if (!result?.signature) console.error('User cancelled or signing failed');
         const signature = result.signature;
 
         const transfer: Transfer = {
             signature,
             signer: this.signer,
-            to: options.to,
-            amount: tokens,
+            ...options,
             nonce: nextNonce,
         };
 
         // Send transfer to server
-        const response = await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/xfer`, transfer);
+        const response = await axios.post(this.endpoints.transfer, transfer);
         if (response.status !== 200) {
             throw new Error(`Transfer failed: ${response.statusText}`);
         }
@@ -308,7 +173,12 @@ export class Blaze {
         return response.data;
     }
 
-    async deposit(amount: number) {
+    /**
+     * Initiates a deposit transaction to the subnet
+     * @param amount - Amount to deposit
+     * @returns Transaction result with txid
+     */
+    async deposit(amount: number): Promise<TransactionResult> {
         if (!this.signer) {
             this.signer = await this.connectWallet();
         }
@@ -326,20 +196,19 @@ export class Blaze {
         });
 
         if (!result?.txId) {
-            throw new Error('Transaction cancelled or failed');
+            console.error('Transaction cancelled or failed');
+            return { txid: '' };
         }
 
-        // Notify server about the deposit
-        await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/deposit`, {
-            txid: result.txId,
-            amount,
-            signer: this.signer
-        });
-
-        return result;
+        return { txid: result.txId };
     }
 
-    async withdraw(amount: number) {
+    /**
+     * Initiates a withdrawal transaction from the subnet
+     * @param amount - Amount to withdraw
+     * @returns Transaction result with txid
+     */
+    async withdraw(amount: number): Promise<TransactionResult> {
         if (!this.signer) {
             this.signer = await this.connectWallet();
         }
@@ -357,16 +226,10 @@ export class Blaze {
         });
 
         if (!result?.txId) {
-            throw new Error('Transaction cancelled or failed');
+            console.error('Transaction cancelled or failed');
+            return { txid: '' };
         }
 
-        // Notify server about the withdrawal
-        await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/withdraw`, {
-            txid: result.txId,
-            amount,
-            signer: this.signer
-        });
-
-        return result;
+        return { txid: result.txId };
     }
 } 

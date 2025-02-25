@@ -9,11 +9,9 @@ Blaze is a layer 2 scaling solution for Stacks that enables fast, off-chain tran
 ```mermaid
 graph TD
     A[Client] -->|Transfer Request| B[Subnet Node]
-    B -->|Real-time Updates| A
     B -->|Batch Settlement| C[Stacks Chain]
     C -->|Chainhooks Event| B
-    B -->|State Storage| D[KV Store]
-    B -->|Real-time Updates| A
+    B -->|State Storage| D[Mempool]
 ```
 
 ## Core Components
@@ -24,183 +22,140 @@ The client SDK provides a simple interface for applications to interact with Bla
 
 ```typescript
 class Blaze {
+    // Wallet management
+    async connectWallet(): Promise<string>
+    disconnectWallet(): void
+    isWalletConnected(): boolean
+    getWalletAddress(): string
+    
     // Core operations
     async transfer(options: TransferOptions): Promise<TransactionResult>
-    async deposit(amount: number): Promise<FinishedTxData>
-    async withdraw(amount: number): Promise<FinishedTxData>
+    async deposit(amount: number): Promise<TransactionResult>
+    async withdraw(amount: number): Promise<TransactionResult>
     
     // Balance management
-    async getBalance(options?: BalanceOptions): Promise<Balance>
+    async getBalance(): Promise<number>
+    async refreshBalance(): Promise<number>
     
-    // Real-time updates
-    subscribe(type: EventType, handler: (event: BlazeEvent) => void): EventSubscription
-}
-
-// Balance types
-interface Balance {
-    total: number;           // Total available balance (confirmed + unconfirmed)
-    confirmed?: number;      // Optional: On-chain confirmed balance
-    unconfirmed?: number;    // Optional: Pending unconfirmed balance
-}
-
-interface BalanceOptions {
-    includeConfirmed?: boolean;    // Include confirmed balance in response
-    includeUnconfirmed?: boolean;  // Include unconfirmed balance in response
+    // Block mining
+    async mineBlock(batchSize?: number): Promise<TransactionResult>
 }
 ```
 
 Key features:
 - Structured data signing for transfers
-- SSE-based real-time updates
-- Automatic reconnection with exponential backoff
-- Flexible balance tracking (total/confirmed/unconfirmed)
-- Optimized state management
+- Simple numeric balance representation
+- Manual balance refreshing
+- Explicit block mining
 
 ### 2. Subnet Node
 
 The subnet node is responsible for:
 - Processing transfer requests
-- Managing transfer queues
+- Managing the transaction mempool
 - Batch settlement on-chain
-- State synchronization
-- Real-time event streaming
+- Balance tracking and management
 
 ```typescript
 class Subnet {
     // Core operations
-    async processTransfers(): Promise<TransactionResult>
-    async addTransferToQueue(transfer: Transfer): Promise<void>
+    async processTxRequest(txRequest: Transfer): Promise<void>
+    async mineBlock(batchSize?: number): Promise<TransactionResult>
     
     // Balance management
-    async getBalance(user: string, options?: BalanceOptions): Promise<Balance>
-    async processDepositEvent(user: string, amount: number): Promise<void>
-    async processWithdrawEvent(user: string, amount: number): Promise<void>
-    async processTransferEvent(from: string, to: string, amount: number): Promise<void>
+    async getBalance(user?: string): Promise<number>
+    async getBalances(): Promise<Record<string, number>>
+    async refreshBalances(user?: string): Promise<void>
     
-    // Event handling
-    addEventClient(signer: string, callback: (event: BlazeEvent) => void): void
-    removeEventClient(signer: string, callback: (event: BlazeEvent) => void): void
+    // On-chain operations
+    async deposit(amount: number): Promise<TransactionResult>
+    async withdraw(amount: number): Promise<TransactionResult>
 }
 ```
 
-### 3. State Management
+### 3. Mempool
 
-State is managed through a Vercel KV store or Redis instance with optimized balance tracking:
+The mempool manages unconfirmed transactions waiting to be mined into blocks:
 
 ```typescript
-// Balance key format
-${contract}:${user}:${type} // type = 'confirmed' | 'unconfirmed'
-
-// Balance operations
-interface BalanceOperations {
-    // Get balances
-    async function getBalance(
-        contract: string,
-        user: string,
-        options?: BalanceOptions
-    ): Promise<Balance>
-
-    // Update balances
-    async function updateBalance(
-        contract: string,
-        user: string,
-        amount: number,
-        options?: BalanceOptions
-    ): Promise<void>
-
-    // Process events
-    async function processDepositEvent(contract: string, user: string, amount: number): Promise<void>
-    async function processWithdrawEvent(contract: string, user: string, amount: number): Promise<void>
-    async function processTransferEvent(contract: string, from: string, to: string, amount: number): Promise<void>
+class Mempool {
+    // Transaction management
+    getQueue(): Transaction[]
+    addTransaction(transaction: Transaction): void
+    getBatchToMine(maxBatchSize?: number): Transaction[]
+    removeProcessedTransactions(count: number): void
+    
+    // Balance calculations
+    getPendingBalanceChanges(): Map<string, number>
+    getTotalBalances(): Map<string, number>
+    async getBalance(user: string): Promise<number>
 }
 ```
 
 ## Data Flow
 
-### 1. Balance Updates Flow
+### 1. Transfer Flow
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Node
-    participant KV
-    participant Chain
-
-    Note over Client: Request balance
-    Client->>Node: Get balance (with options)
-    Node->>KV: Get confirmed balance
-    Node->>KV: Get unconfirmed balance
-    Node->>Node: Calculate total
-    Node->>Client: Return balance object
-    
-    Note over Chain: On-chain event
-    Chain->>Node: Balance change event
-    Node->>KV: Update confirmed balance
-    Node->>KV: Update unconfirmed balance
-    Node->>Client: SSE: Balance update
-```
-
-### 2. Transfer Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Node
-    participant KV
+    participant Mempool
     participant Chain
 
     Client->>Node: Submit transfer
     Node->>Node: Validate signature
-    Node->>KV: Update unconfirmed balances
-    Node->>Client: SSE: Balance update
-    Node->>Node: Add to queue
-    Note over Node: Wait for batch
+    Node->>Mempool: Add transaction
+    Note over Node: Wait for mine block
     Node->>Chain: Settle batch
     Chain->>Node: Event: Batch settled
-    Node->>KV: Update confirmed balances
-    Node->>Client: SSE: Transfer complete
+    Node->>Mempool: Remove processed transactions
 ```
 
-### 3. Deposit Flow
+### 2. Balance Management
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Node
-    participant KV
+    participant Mempool
     participant Chain
 
-    Client->>Chain: Deposit transaction
-    Chain->>Node: Event: Deposit
-    Node->>KV: Update balances
-    Node->>Client: SSE: Balance update
+    Client->>Node: Get balance
+    Node->>Mempool: Get total balance
+    Mempool->>Node: Balance (confirmed + pending)
+    Node->>Client: Return balance
+    
+    Note over Client: After on-chain event
+    Client->>Node: Refresh balance
+    Node->>Chain: Fetch on-chain state
+    Node->>Mempool: Update balances
+    Node->>Client: Return updated balance
 ```
 
 ## Technical Decisions
 
-### 1. Real-time Updates
+### 1. Mempool-Based Architecture
 
-**Decision**: Use Server-Sent Events (SSE) instead of WebSocket
-- Better support in Edge Functions
-- Simpler implementation
-- Native browser support
-- Automatic reconnection
-- One-way communication sufficient for updates
+**Decision**: Use an in-memory transaction pool (mempool)
+- Simple and efficient transaction management
+- Clear separation between confirmed and pending transactions
+- Familiar model for blockchain developers
+- Enables efficient batch mining
 
-### 2. State Management
+### 2. Balance Simplification
 
-**Decision**: Use Vercel KV/Redis
-- Low latency
-- High availability
-- Built-in persistence
-- Atomic operations
-- Scalable
+**Decision**: Use single numeric balance values
+- Simpler API for developers
+- Less cognitive overhead
+- Still maintains internal tracking of confirmed vs. pending
+- Manual refresh when needed for on-chain updates
 
 ### 3. Batch Processing
 
 **Decision**: Queue-based batch processing
 - Configurable batch size
-- Configurable processing interval
+- Manual or scheduled mining triggers
 - Automatic queue management
 - Error recovery
 
@@ -226,59 +181,259 @@ Nodes are secured through:
 
 ### 1. Throughput
 
-- Maximum batch size: 200 transfers
-- Default batch interval: ~30 seconds
-- Theoretical maximum: ~580,000 transfers per day per node
+- Each batch transaction can contain up to 200 transfers
+- Stacks blocks confirm every 5-30 seconds on average
+- Multiple batch transactions can be included in each Stacks block
+- Theoretical maximum: Up to millions of transfers per day per node
+  - Example: At 10 seconds per block with 5 batch transactions per block
+  - 5 batches × 200 transfers = 1,000 transfers per block
+  - 8,640 blocks per day = 8,640,000 transfers per day
+  - Limited only by Stacks blockchain block capacity and fee considerations
 
 ### 2. Latency
 
 - Transfer submission: < 100ms
-- Balance updates: Real-time
-- Batch settlement: ~5 minutes
+- Batch settlement: ~10-40 seconds (depends on Stacks block time)
 
 ### 3. Scalability
 
 The system can scale through:
 1. Multiple subnet nodes
 2. Increased batch sizes
-3. Decreased batch intervals
-4. KV store clustering
+3. Optimized batching strategies (multiple batches per block)
+4. Parallel batch submission
 
-## Balance Management
+## Evolution Path
 
-### 1. Balance Types
+### 1. Multi-Token Support
 
-The system manages three types of balances:
-1. **Total Balance**: The sum of confirmed and unconfirmed balances
-2. **Confirmed Balance**: On-chain verified balance
-3. **Unconfirmed Balance**: Pending transactions and updates
+Blaze is designed to evolve beyond its initial implementation to support multiple tokens:
 
-### 2. Balance Updates
+**sBTC Support**
+- Adding sBTC-specific subnet contracts
+- sBTC-specific transaction handling
+- Cross-subnet atomic operations
 
-Balance updates follow these principles:
-1. **Immediate Feedback**: Unconfirmed changes are applied instantly
-2. **Eventual Consistency**: Confirmed balances sync with chain state
-3. **Atomic Updates**: All balance changes are atomic operations
-4. **Real-time Events**: Balance changes trigger SSE events
+**Token-Specific Subnets**
+- Each token can have its own subnet
+- Token-specific optimization parameters
+- Custom fee structures
 
-### 3. Balance Queries
+### 2. Backend-Driven Applications
 
-Balance queries can be customized:
+Subnets can enable entirely new application patterns by handling logic at the subnet operator level. This allows for complex off-chain computations while leveraging blockchain for settlement.
+
+**Example: Subnet-Powered Lottery**
+
 ```typescript
-// Get total balance only (default)
-const balance = await blaze.getBalance();
-// { total: 1000 }
+// Simplified lottery implementation using Blaze subnet
 
-// Get all balance information
-const fullBalance = await blaze.getBalance({
-    includeConfirmed: true,
-    includeUnconfirmed: true
-});
-// { total: 1000, confirmed: 800, unconfirmed: 200 }
+// Configuration
+const TICKET_PRICE = 100;
+const MAX_TICKETS = 199;
+const PRIZE_PERCENTAGE = 0.99; // 99% goes to winner
+const participants = new Map(); // Stores address -> number of tickets
 
-// Get only confirmed balance
-const confirmedBalance = await blaze.getBalance({
-    includeConfirmed: true
-});
-// { total: 1000, confirmed: 800 }
+// Process a ticket purchase transaction
+async function processTicketPurchase(subnet, tx) {
+  // Validate transaction is a ticket purchase
+  if (tx.to !== subnet.getAddress() || tx.amount % TICKET_PRICE !== 0) {
+    throw new Error("Invalid ticket purchase");
+  }
+  
+  // Calculate number of tickets purchased
+  const tickets = tx.amount / TICKET_PRICE;
+  
+  // Record participant tickets
+  const currentTickets = participants.get(tx.from) || 0;
+  participants.set(tx.from, currentTickets + tickets);
+  
+  // Add transaction to mempool
+  await subnet.processTxRequest(tx);
+  
+  // Check if lottery is ready to be finalized
+  if (subnet.mempool.getQueue().length >= MAX_TICKETS) {
+    await finalizeLottery(subnet);
+  }
+}
+
+// Select winner and distribute prize
+async function finalizeLottery(subnet) {
+  // Calculate total sales from transactions in mempool
+  const totalSales = subnet.mempool.getQueue()
+    .reduce((sum, tx) => sum + tx.amount, 0);
+  
+  // Calculate prize amount (99% of total sales)
+  const prize = Math.floor(totalSales * PRIZE_PERCENTAGE);
+  
+  // Select winner
+  const winner = selectRandomWinner();
+  
+  // Create winner payout transaction
+  const payoutTx = {
+    from: subnet.getAddress(),
+    to: winner,
+    amount: prize,
+    nonce: Date.now(),
+    signature: subnet.signTransaction(winner, prize)
+  };
+  
+  // Add payout to mempool
+  await subnet.processTxRequest(payoutTx);
+  
+  // Mine the block to settle on-chain
+  await subnet.mineBlock();
+  
+  // Reset for next lottery
+  participants.clear();
+}
+
+// Select winner based on tickets purchased
+function selectRandomWinner() {
+  // Create array with one entry per ticket
+  const tickets = [];
+  
+  for (const [address, ticketCount] of participants.entries()) {
+    // Add address to tickets array once per ticket purchased
+    for (let i = 0; i < ticketCount; i++) {
+      tickets.push(address);
+    }
+  }
+  
+  // Random selection (one ticket = one chance to win)
+  const randomIndex = Math.floor(Math.random() * tickets.length);
+  return tickets[randomIndex];
+}
+
+// Usage example
+// subnet.on('transaction', tx => processTicketPurchase(subnet, tx));
 ```
+
+> **Security Caveat for Games of Chance**: 
+> When implementing games of chance like this lottery example, game hosts should be aware of potential frontrunning attacks. Participants could monitor pending batches and attempt to withdraw their funds before the batch is confirmed if they don't win, undermining the integrity of the game. 
+>
+> Consider implementing one or more of these mitigation strategies:
+> 
+> 1. **Confirmation-Based Rewards**: Wait for batch confirmation on the Stacks chain before calculating and issuing rewards
+> 2. **Frontrunner Detection**: Monitor pending Stacks transactions for the subnet to detect potential frontrunners and exclude them from prize eligibility
+> 3. **Smart Contract Custody**: Implement a subnet-enabled smart contract that can custody funds between game rounds, rather than relying solely on the subnet operator as an escrow custodian
+> 4. **Participation Commitments**: Require participants to lock their funds for a minimum time period that exceeds the expected settlement time
+
+With this approach:
+1. The subnet operator runs application-specific logic
+2. User funds remain in the subnet until settlement
+3. Complex computations (like random selection) happen off-chain
+4. Final state (lottery results) is settled on-chain in a single batch
+5. No need for complex smart contract logic
+
+### 3. Application Integration
+
+To make applications subnet-compatible:
+
+1. **Add Signature-Based Endpoints**:
+   - Create signed variants of transaction methods
+   - Support structured data signing
+   - Verify signatures on-chain
+
+2. **Token Contract Integration**:
+   - Token contracts can implement subnet interfaces
+   - Add `signer-transfer` methods
+   - Support batch processing
+
+3. **User Experience**:
+   - Present subnet operations as "instant" options
+   - Show confirmation status
+   - Provide manual refresh options
+
+## Implementation Guidelines for Existing Stacks dApps
+
+Existing Clarity smart contracts can be upgraded to support subnet-based operations using three different integration approaches:
+
+### 1. Standard On-Chain Approach
+
+This is the traditional approach used by most Stacks dApps today, where all operations happen directly on the Stacks blockchain:
+
+```clarity
+;; Standard function - fully on-chain
+(define-public (swap-a-to-b (amount uint))
+  (begin
+    (try! (contract-call? 'ST1234.token-a transfer amount tx-sender (as-contract tx-sender)))
+    (try! (contract-call? 'ST1234.token-b transfer (calculate-amount amount) (as-contract tx-sender) tx-sender))
+    (ok true)))
+```
+
+**How it works:**
+- Transactions are submitted directly to the Stacks blockchain
+- Typical confirmation time of 5-30 seconds
+- Standard gas fees apply to each transaction
+- No subnet integration
+
+**Best for:**
+- Native integration with wallets
+- Low transaction volume applications
+- When settlement finality is more important than speed
+
+### 2. Subnet Contract Integration
+
+This approach integrates with subnet-compatible token contracts while still using standard Stacks transaction flow:
+
+```clarity
+;; Subnet-enabled option 1 (stacks mempool, standard balance updates)
+(define-public (swap-a-to-b (amount uint))
+  (begin
+    (try! (contract-call? 'ST1234.token-a-subnet transfer amount tx-sender (as-contract tx-sender)))
+    (try! (contract-call? 'ST1234.token-b transfer (calculate-amount amount) (as-contract tx-sender) tx-sender))
+    (ok true)))
+```
+
+**How it works:**
+- Wallet signs a normal transaction and sends to Stacks mempool
+- The first token contract (`token-a-subnet`) is subnet-aware
+- Confirmation still requires Stacks blockchain settlement (5-30 seconds)
+- Subnet tokens can still be transfered like normal tokens, btw
+- Standard transaction signing model (no specialized signatures)
+
+**Best for:**
+- Partial subnet integration with minimal code changes
+- Applications with mixed token types (some subnet-compatible, some standard)
+- Incremental adoption of subnet technology
+- Maintaining compatibility with existing wallets
+
+### 3. Signature-Based Subnet Integration
+
+This approach fully leverages the Blaze mempool for high-throughput, instant operations:
+
+```clarity
+;; Subnet-enabled option 2 (blaze mempool, instant balance updates)
+(define-public (swap-a-to-b-signed (signature (buff 65)) (nonce uint) (amount uint))
+  (let (
+    (signer (derive-signer signature amount nonce))
+  )
+    (try! (contract-call? 'ST1234.token-a-subnet signer-transfer signature (as-contract tx-sender) amount nonce))
+    (try! (contract-call? 'ST1234.token-b transfer (calculate-amount amount) (as-contract tx-sender) signer))
+    (ok true)))
+```
+
+**How it works:**
+- Uses structured data signatures to authorize transfers off-chain
+- The `signature` parameter contains a signed message from the user authorizing the transfer
+- The contract verifies the signature cryptographically to derive the signer
+- Transactions can be processed instantly in the Blaze mempool before on-chain settlement
+- Balances update immediately- the Blaze subnet credits the balance changes from the swap to both parties
+- Transaction batching happens behind the scenes
+- Settlement occurs when the subnet mines a block (every few seconds to minutes)
+
+**Best for:**
+- High-volume transaction applications
+- Interactive user experiences requiring immediate feedback
+- Applications with high transaction volumes
+- Gaming or interactive applications
+- Cost-sensitive applications (batching reduces per-transaction cost)
+
+**Not for:**
+- Front running or other scenarios that would call for high-fees 
+- Use cases where time-to-settle on Stacks is of upmost importance
+
+## Conclusion
+
+Blaze provides a flexible, extensible framework for layer 2 scaling on Stacks. By following the integration patterns outlined above, developers can create high-volume, high-throughput dapps that maintain blockchain security while providing near-instant web2-like user experiences.

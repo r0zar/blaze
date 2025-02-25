@@ -3,22 +3,202 @@ import { STACKS_MAINNET } from '@stacks/network';
 import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
 import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { Balance, TransferOptions, TransactionResult, Transfer, Status, BlazeEvent, BalanceOptions, BlazeMessage, TxRequest } from '../types';
-import { kv } from '@vercel/kv';
+import { Balance, TransactionResult, Transfer, Status, BalanceOptions, BlazeMessage, BaseTransaction } from '../types';
+import { TransactionType } from '../types';
+
+/**
+ * Represents a single transaction in the queue
+ */
+export class Transaction implements BaseTransaction {
+    type: TransactionType;
+    affectedUsers: string[];
+
+    constructor(public transfer: Transfer) {
+        this.type = TransactionType.TRANSFER;
+        this.affectedUsers = [transfer.signer, transfer.to];
+    }
+
+    /**
+     * Gets the balance changes this transaction would cause
+     * @returns A map of user addresses to their balance changes (positive or negative)
+     */
+    getBalanceChanges(): Map<string, number> {
+        const changes = new Map<string, number>();
+        changes.set(this.transfer.signer, -this.transfer.amount);
+        changes.set(this.transfer.to, this.transfer.amount);
+        return changes;
+    }
+
+    /**
+     * Converts the transaction to a Clarity value for on-chain processing
+     * @returns Clarity tuple for the transaction
+     */
+    toClarityValue(): any {
+        return Cl.tuple({
+            signature: Cl.bufferFromHex(this.transfer.signature),
+            signer: Cl.principal(this.transfer.signer),
+            to: Cl.principal(this.transfer.to),
+            amount: Cl.uint(this.transfer.amount),
+            nonce: Cl.uint(this.transfer.nonce),
+        });
+    }
+}
+
+/**
+ * Manages unconfirmed transactions waiting to be mined into blocks
+ * Acts as a memory pool (mempool) for transactions before they are written to the blockchain
+ */
+export class Mempool {
+    private queue: Transaction[] = [];
+
+    constructor(private subnet: string, private balances: Map<string, number>, private fetchContractBalance: (user: string) => Promise<number>) { }
+
+    /**
+     * Get the current transaction queue
+     */
+    getQueue(): Transaction[] {
+        return this.queue;
+    }
+
+    /**
+     * Add a transaction to the mempool
+     */
+    addTransaction(transaction: Transaction): void {
+        this.queue.push(transaction);
+    }
+
+    /**
+     * Get all users affected by transactions in the mempool
+     */
+    getAffectedUsers(): Set<string> {
+        const users = new Set<string>();
+        this.queue.forEach(tx => {
+            tx.affectedUsers.forEach(user => users.add(user));
+        });
+        return users;
+    }
+
+    /**
+     * Calculate pending balance changes for all users from transactions in the mempool
+     * @returns Map of user addresses to their pending balance changes
+     */
+    getPendingBalanceChanges(): Map<string, number> {
+        const pendingChanges = new Map<string, number>();
+
+        // Apply changes from each transaction
+        this.queue.forEach(tx => {
+            const changes = tx.getBalanceChanges();
+
+            // Add each change to the pending changes map
+            changes.forEach((change, user) => {
+                const currentChange = pendingChanges.get(user) || 0;
+                pendingChanges.set(user, currentChange + change);
+            });
+        });
+
+        return pendingChanges;
+    }
+
+    /**
+     * Calculate total balances including pending changes from the mempool
+     * @returns Map of user addresses to their total balances
+     */
+    getTotalBalances(): Map<string, number> {
+        const totalBalances = new Map(this.balances);
+        const pendingChanges = this.getPendingBalanceChanges();
+
+        // Apply pending changes to confirmed balances
+        pendingChanges.forEach((change, user) => {
+            const confirmedBalance = totalBalances.get(user) || 0;
+            totalBalances.set(user, confirmedBalance + change);
+        });
+
+        return totalBalances;
+    }
+
+    /**
+     * Get the first batch of transactions to process (up to maxBatchSize)
+     * @param maxBatchSize Maximum number of transactions to include in a block
+     * @returns Array of transactions to process
+     */
+    getBatchToMine(maxBatchSize: number = 200): Transaction[] {
+        return this.queue.slice(0, maxBatchSize);
+    }
+
+    /**
+     * Remove processed transactions from the mempool
+     * @param count Number of transactions to remove
+     */
+    removeProcessedTransactions(count: number): void {
+        this.queue.splice(0, count);
+    }
+
+    /**
+     * Get the balance for a specific user, including pending transactions
+     * @param user User address
+     * @param options Balance options
+     * @returns Balance object with total, confirmed, and unconfirmed amounts
+     */
+    async getBalance(user: string, options?: BalanceOptions): Promise<Balance> {
+        // Ensure the user's on-chain balance is loaded
+        if (!this.balances.has(user)) {
+            await this.fetchContractBalance(user);
+        }
+
+        // Get confirmed balance
+        const confirmedBalance = this.balances.get(user) || 0;
+
+        // Calculate pending balance changes from the mempool
+        const pendingChanges = this.getPendingBalanceChanges().get(user) || 0;
+
+        const balance: Balance = {
+            total: confirmedBalance + pendingChanges
+        };
+
+        if (options?.includeConfirmed) {
+            balance.confirmed = confirmedBalance;
+        }
+
+        if (options?.includeUnconfirmed) {
+            balance.unconfirmed = pendingChanges;
+        }
+
+        return balance;
+    }
+
+    /**
+     * Build batch transfer transaction options for the current contract
+     * @param txsToMine Array of transactions to include in the batch
+     * @param contractAddress Contract address
+     * @param contractName Contract name
+     * @returns Transaction options for the batch transfer
+     */
+    buildBatchTransferTxOptions(txsToMine: Transaction[], contractAddress: string, contractName: string): any {
+        // Build the clarity operations for batch transfer
+        const clarityOperations = txsToMine.map(tx => tx.toClarityValue());
+
+        // Build transaction options
+        return {
+            contractAddress,
+            contractName,
+            functionName: 'batch-transfer',
+            functionArgs: [Cl.list(clarityOperations)],
+            network: STACKS_MAINNET,
+            fee: 1800
+        };
+    }
+}
 
 export class Subnet {
     subnet: string;
     tokenIdentifier: string;
     signer: string;
-    queue: Transaction[];
-    lastProcessedBlock: number;
-    eventClients: Map<string, Set<(event: BlazeEvent) => void>> = new Map();
-    privateKey: string | undefined;
     balances: Map<string, number> = new Map();
+    mempool: Mempool;
+    lastProcessedBlock: number;
 
     constructor() {
         this.signer = '';
-        this.queue = [];
         this.lastProcessedBlock = 0
         this.subnet = WELSH;
 
@@ -26,46 +206,21 @@ export class Subnet {
         if (!this.tokenIdentifier) {
             throw new Error(`No token identifier found for subnet: ${this.subnet}`);
         }
-    }
 
-    public addEventClient(signer: string, callback: (event: BlazeEvent) => void) {
-        if (!this.eventClients.has(signer)) {
-            this.eventClients.set(signer, new Set());
-        }
-        this.eventClients.get(signer)?.add(callback);
-    }
-
-    public removeEventClient(signer: string, callback: (event: BlazeEvent) => void) {
-        this.eventClients.get(signer)?.delete(callback);
-        if (this.eventClients.get(signer)?.size === 0) {
-            this.eventClients.delete(signer);
-        }
-    }
-
-    private emitEvent(event: BlazeEvent) {
-        // Emit to specific signer if event is targeted
-        if (event.data.from) {
-            this.eventClients.get(event.data.from)?.forEach(callback => callback(event));
-        }
-        if (event.data.to) {
-            this.eventClients.get(event.data.to)?.forEach(callback => callback(event));
-        }
-
-        // Emit to all clients interested in this contract's events
-        this.eventClients.get(this.subnet)?.forEach(callback => callback(event));
+        // Initialize the mempool
+        this.mempool = new Mempool(
+            this.subnet,
+            this.balances,
+            this.fetchContractBalance.bind(this)
+        );
     }
 
     public getStatus(): Status {
         return {
             subnet: this.subnet,
-            txQueue: this.queue,
+            txQueue: this.mempool.getQueue(),
             lastProcessedBlock: this.lastProcessedBlock,
         };
-    }
-
-    private getBalanceKey(type: 'confirmed' | 'unconfirmed', user?: string): string {
-        const address = user || this.signer;
-        return `${this.subnet}:${address}:${type}`;
     }
 
     /**
@@ -88,244 +243,51 @@ export class Subnet {
             this.balances.set(user, balance);
 
             return balance;
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Failed to fetch contract balance:', error);
             return 0;
         }
     }
 
-    /**
-     * Get a user's confirmed balance from KV store, fetching from contract if not found
-     */
-    private async getConfirmedBalance(user: string): Promise<number> {
-        const key = this.getBalanceKey('confirmed', user);
-        const storedBalance = await kv.get<number>(key);
+    // get all balances
+    async getBalances() {
+        // First, collect all unique users affected by transactions
+        const usersInQueue = this.mempool.getAffectedUsers();
 
-        if (storedBalance === null) {
-            // First time: fetch from contract and store
-            const contractBalance = await this.fetchContractBalance(user);
-            await kv.set(key, contractBalance);
-            return contractBalance;
+        // Fetch on-chain balances for all users that might not be in the balances Map
+        const fetchPromises = [];
+        for (const user of Array.from(usersInQueue)) {
+            if (!this.balances.has(user)) {
+                fetchPromises.push(this.fetchContractBalance(user));
+            }
         }
 
-        return storedBalance;
+        // Wait for all balance fetches to complete
+        if (fetchPromises.length > 0) {
+            await Promise.all(fetchPromises);
+        }
+
+        // Get total balances with pending changes applied
+        const totalBalances = this.mempool.getTotalBalances();
+        return Object.fromEntries(totalBalances);
     }
 
     /**
-     * Get a user's unconfirmed balance changes from KV store
-     */
-    private async getUnconfirmedBalance(user: string): Promise<number> {
-        const key = this.getBalanceKey('unconfirmed', user);
-        return await kv.get<number>(key) ?? 0;
-    }
-
-    // get all balances
-    getBalances() {
-        // Create a new Map to store the final balances
-        const pendingBalances = new Map(this.balances);
-
-        // Apply pending transactions from the queue
-        this.queue.forEach(tx => {
-            // Deduct from sender
-            const senderBalance = pendingBalances.get(tx.transfer.signer) ?? 0;
-            pendingBalances.set(tx.transfer.signer, senderBalance - tx.transfer.amount);
-
-            // Add to recipient
-            const recipientBalance = pendingBalances.get(tx.transfer.to) ?? 0;
-            pendingBalances.set(tx.transfer.to, recipientBalance + tx.transfer.amount);
-        });
-
-        return Object.fromEntries(pendingBalances);
-    }
-
-    /**
-     * Get a user's complete balance information and emit balance event
+     * Get a user's complete balance information
      */
     async getBalance(user?: string, options?: BalanceOptions): Promise<Balance> {
         const address = user || this.signer;
-        const [confirmed, unconfirmed] = await Promise.all([
-            this.getConfirmedBalance(address),
-            this.getUnconfirmedBalance(address)
-        ]);
-
-        const confirmedAmount = confirmed ?? 0;
-        const unconfirmedAmount = unconfirmed ?? 0;
-
-        const balance: Balance = {
-            total: confirmedAmount + unconfirmedAmount
-        };
-
-        if (options?.includeConfirmed) {
-            balance.confirmed = confirmedAmount;
-        }
-
-        if (options?.includeUnconfirmed) {
-            balance.unconfirmed = unconfirmedAmount;
-        }
-
-        this.emitEvent({
-            type: 'balance',
-            contract: this.subnet,
-            data: {
-                from: address,
-                balance,
-                timestamp: Date.now()
-            }
-        });
-
-        return balance;
-    }
-
-    /**
-     * Process a deposit event
-     * Updates both confirmed and unconfirmed balances
-     */
-    async processDepositEvent(user: string, amount: number): Promise<void> {
-        const confirmedKey = this.getBalanceKey('confirmed', user);
-        const unconfirmedKey = this.getBalanceKey('unconfirmed', user);
-
-        const [currentConfirmed, currentUnconfirmed] = await Promise.all([
-            kv.get<number>(confirmedKey),
-            kv.get<number>(unconfirmedKey)
-        ]);
-
-        await Promise.all([
-            kv.set(confirmedKey, (currentConfirmed ?? 0) + amount),
-            kv.set(unconfirmedKey, (currentUnconfirmed ?? 0) + amount)
-        ]);
-
-        this.emitEvent({
-            type: 'deposit',
-            contract: this.subnet,
-            data: {
-                from: user,
-                amount,
-                status: 'completed',
-                timestamp: Date.now()
-            }
-        });
-
-        // Emit updated balance
-        await this.getBalance(user);
-    }
-
-    /**
-     * Process a withdrawal event
-     * Updates both confirmed and unconfirmed balances
-     */
-    async processWithdrawEvent(user: string, amount: number): Promise<void> {
-        const confirmedKey = this.getBalanceKey('confirmed', user);
-        const unconfirmedKey = this.getBalanceKey('unconfirmed', user);
-
-        const [currentConfirmed, currentUnconfirmed] = await Promise.all([
-            kv.get<number>(confirmedKey),
-            kv.get<number>(unconfirmedKey)
-        ]);
-
-        await Promise.all([
-            kv.set(confirmedKey, (currentConfirmed ?? 0) - amount),
-            kv.set(unconfirmedKey, (currentUnconfirmed ?? 0) - amount)
-        ]);
-
-        this.emitEvent({
-            type: 'withdraw',
-            contract: this.subnet,
-            data: {
-                to: user,
-                amount,
-                status: 'completed',
-                timestamp: Date.now()
-            }
-        });
-
-        // Emit updated balance
-        await this.getBalance(user);
-    }
-
-    /**
-     * Process a transfer event
-     * Updates both confirmed and unconfirmed balances for sender and receiver
-     */
-    async processTransferEvent(from: string, to: string, amount: number, txid?: string): Promise<void> {
-        // Get all balance keys
-        const fromConfirmedKey = this.getBalanceKey('confirmed', from);
-        const fromUnconfirmedKey = this.getBalanceKey('unconfirmed', from);
-        const toConfirmedKey = this.getBalanceKey('confirmed', to);
-        const toUnconfirmedKey = this.getBalanceKey('unconfirmed', to);
-
-        // Get current balances
-        const [fromConfirmed, fromUnconfirmed, toConfirmed, toUnconfirmed] = await Promise.all([
-            kv.get<number>(fromConfirmedKey),
-            kv.get<number>(fromUnconfirmedKey),
-            kv.get<number>(toConfirmedKey),
-            kv.get<number>(toUnconfirmedKey)
-        ]);
-
-        // Update all balances atomically
-        await Promise.all([
-            kv.set(fromConfirmedKey, (fromConfirmed ?? 0) - amount),
-            kv.set(fromUnconfirmedKey, (fromUnconfirmed ?? 0) - amount),
-            kv.set(toConfirmedKey, (toConfirmed ?? 0) + amount),
-            kv.set(toUnconfirmedKey, (toUnconfirmed ?? 0) + amount)
-        ]);
-
-        // Emit transfer event
-        this.emitEvent({
-            type: 'transfer',
-            contract: this.subnet,
-            data: {
-                from,
-                to,
-                amount,
-                status: 'completed',
-                txid,
-                timestamp: Date.now()
-            }
-        });
-
-        // Emit updated balances for both parties
-        await Promise.all([
-            this.getBalance(from),
-            this.getBalance(to)
-        ]);
-    }
-
-    /**
-     * Update confirmed balance and emit event
-     */
-    async updateConfirmedBalance(userOrAmount: string | number, amount?: number): Promise<void> {
-        if (typeof userOrAmount === 'number') {
-            // Legacy support for old method signature
-            await kv.set(this.getBalanceKey('confirmed'), userOrAmount);
-            await this.getBalance();
-        } else {
-            await kv.set(this.getBalanceKey('confirmed', userOrAmount), amount!);
-            await this.getBalance(userOrAmount);
-        }
-    }
-
-    /**
-     * Update unconfirmed balance and emit event
-     */
-    async updateUnconfirmedBalance(userOrAmount: string | number, amount?: number): Promise<void> {
-        if (typeof userOrAmount === 'number') {
-            // Legacy support for old method signature
-            await kv.set(this.getBalanceKey('unconfirmed'), userOrAmount);
-            await this.getBalance();
-        } else {
-            await kv.set(this.getBalanceKey('unconfirmed', userOrAmount), amount!);
-            await this.getBalance(userOrAmount);
-        }
+        return this.mempool.getBalance(address, options);
     }
 
     private async executeTransaction(txOptions: any): Promise<TransactionResult> {
-        if (!this.privateKey) {
+        if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
 
         const transaction = await makeContractCall({
             ...txOptions,
-            senderKey: this.privateKey,
+            senderKey: process.env.PRIVATE_KEY,
             network: STACKS_MAINNET,
         });
 
@@ -338,92 +300,25 @@ export class Subnet {
         return { txid: response.txid };
     }
 
-    // async transfer(options: TransferOptions) {
-    //     const nextNonce = Date.now();
-    //     const tokens = options.amount;
-
-    //     if (!this.privateKey) {
-    //         throw new Error('PRIVATE_KEY environment variable not set');
-    //     }
-
-    //     const signature = await this.generateSignature({
-    //         to: options.to,
-    //         amount: tokens,
-    //         nonce: nextNonce
-    //     });
-
-    //     const transfer: Transfer = {
-    //         signature,
-    //         signer: this.signer,
-    //         to: options.to,
-    //         amount: tokens,
-    //         nonce: nextNonce,
-    //     };
-
-    //     this.emitEvent({
-    //         type: 'transfer',
-    //         contract: this.subnet,
-    //         data: {
-    //             from: this.signer,
-    //             to: options.to,
-    //             amount: tokens,
-    //             status: 'pending',
-    //             timestamp: Date.now()
-    //         }
-    //     });
-
-    //     await this.addTransferToQueue(transfer);
-
-    //     // Check if we should process the batch
-    //     if (this.shouldProcessBatch()) {
-    //         return this.processTransfers();
-    //     }
-
-    //     return { queued: true, queueSize: this.queue.length };
-    // }
-
-    private shouldProcessBatch(): boolean {
-        // Add your batch processing logic here
-        // For example, process when queue reaches certain size
-        return this.queue.length >= 20;
+    public async processTxRequest(txRequest: Transfer) {
+        await this.validateTransferOperation(txRequest);
+        // create a new Transaction object and put it in the queue
+        const transaction = new Transaction(txRequest);
+        this.mempool.addTransaction(transaction);
     }
 
     /**
-     * Apply an unconfirmed balance change immediately and emit event
+     * Process transactions from the mempool and mine a new block by executing a batch transfer
+     * @param batchSize Optional number of transactions to process (default: up to 200)
+     * @returns Transaction result containing the txid if successful
      */
-    private async applyUnconfirmedChange(user: string, amount: number, type: 'deposit' | 'withdraw' | 'transfer'): Promise<void> {
-        const unconfirmedKey = this.getBalanceKey('unconfirmed', user);
-        const currentUnconfirmed = await kv.get<number>(unconfirmedKey) ?? 0;
+    public async mineBlock(batchSize?: number): Promise<TransactionResult> {
+        const queue = this.mempool.getQueue();
 
-        // Update unconfirmed balance immediately
-        await kv.set(unconfirmedKey, currentUnconfirmed + amount);
-
-        // Emit balance update event immediately
-        await this.getBalance(user);
-
-        // Emit specific event type
-        this.emitEvent({
-            type,
-            contract: this.subnet,
-            data: {
-                from: type === 'withdraw' ? undefined : user,
-                to: type === 'withdraw' ? user : (type === 'transfer' ? undefined : undefined),
-                amount: Math.abs(amount),
-                status: 'processing',
-                timestamp: Date.now()
-            }
-        });
-    }
-
-    public async processTxRequest(txRequest: Transfer) {
-        // create a new Transaction object and put it in the queue
-        const transaction = new Transaction(txRequest);
-        this.queue.push(transaction);
-    }
-
-    public async settleTransactions(batchSize?: number) {
         // Don't process if queue is empty
-        if (this.queue.length === 0) return;
+        if (queue.length === 0) {
+            throw new Error('No transactions to mine');
+        }
 
         // Get contract details from subnet identifier (e.g. "ST1234.my-contract")
         const [contractAddress, contractName] = this.subnet.split('.');
@@ -431,275 +326,84 @@ export class Subnet {
             throw new Error('Invalid contract format');
         }
 
-        // NOTE: this is a potential future batch transaction format
-        // const clarityOperations = this.queue.map(op => {
-        //     return Cl.tuple({
-        //         seal: Cl.tuple({
-        //             signature: Cl.bufferFromHex(op.txRequest.signature),
-        //             nonce: Cl.uint(op.txRequest.nonce),
-        //         }),
-        //         function: Cl.tuple({
-        //             name: Cl.stringAscii(op.txRequest.function.name),
-        //             args: Cl.list(op.txRequest.function.args.map(arg => Cl.stringAscii(arg))),
-        //         }),
-        //     });
-        // });
+        // Get transactions that will be settled (up to batchSize or 200)
+        const maxBatchSize = batchSize || 200;
+        const txsToMine = this.mempool.getBatchToMine(maxBatchSize);
 
-        // const clarityOperations = this.queue.map(op => {
-        //     return Cl.tuple({
-        //         signature: Cl.bufferFromHex(op.transfer.signature),
-        //         signer: Cl.principal(op.transfer.signer),
-        //         to: Cl.principal(op.transfer.to),
-        //         amount: Cl.uint(op.transfer.amount),
-        //         nonce: Cl.uint(op.transfer.nonce),
-        //     });
-        // });
-
-        // Get the transactions that will be settled
-        // if no batch size is provided, settle oldest 200 transactions
-        const txsToSettle = batchSize ? this.queue.splice(0, batchSize) : this.queue.splice(0, 200);
-
-        // Apply balance changes from settled transactions
-        for (const tx of txsToSettle) {
-            // Deduct from sender
-            const senderBalance = this.balances.get(tx.transfer.signer) || 0;
-            this.balances.set(tx.transfer.signer, senderBalance - tx.transfer.amount);
-
-            // Add to receiver
-            const receiverBalance = this.balances.get(tx.transfer.to) || 0;
-            this.balances.set(tx.transfer.to, receiverBalance + tx.transfer.amount);
-        }
-
-        // return {
-        //     contractAddress,
-        //     contractName,
-        //     functionName: `batch-transfer`,
-        //     functionArgs: [Cl.list(clarityOperations)],
-        //     senderKey: this.privateKey!,
-        //     network: STACKS_MAINNET,
-        //     fee: 1800
-        // };
-    }
-
-    // public async addTransferToQueue(transfer: Transfer): Promise<void> {
-    //     // Validate transfer including signature verification
-    //     await this.validateTransferOperation(transfer);
-
-    //     // Verify balances
-    //     const balances = await this.getBalance(transfer.signer);
-    //     if ((balances.confirmed ?? 0) + (balances.unconfirmed ?? 0) < transfer.amount) {
-    //         this.emitEvent({
-    //             type: 'transfer',
-    //             contract: this.subnet,
-    //             data: {
-    //                 from: transfer.signer,
-    //                 to: transfer.to,
-    //                 amount: transfer.amount,
-    //                 status: 'failed',
-    //                 error: 'Insufficient balance',
-    //                 timestamp: Date.now()
-    //             }
-    //         });
-    //         throw new Error('Insufficient balance');
-    //     }
-
-    //     // Apply unconfirmed changes immediately
-    //     await Promise.all([
-    //         this.applyUnconfirmedChange(transfer.signer, -transfer.amount, 'transfer'),
-    //         this.applyUnconfirmedChange(transfer.to, transfer.amount, 'transfer')
-    //     ]);
-
-    //     // Add to queue
-    //     this.queue.push(transfer);
-    //     console.log('Added transfer to queue:', transfer);
-    // }
-
-    // public async processTransfers(): Promise<TransactionResult | void> {
-    //     if (!this.privateKey) {
-    //         throw new Error('PRIVATE_KEY environment variable not set');
-    //     }
-
-    //     const queueLength = this.queue.length;
-    //     if (queueLength === 0) return;
-
-    //     console.log('Processing transfers:', queueLength);
-
-    //     this.emitEvent({
-    //         type: 'batch',
-    //         contract: this.subnet,
-    //         data: {
-    //             status: 'processing',
-    //             timestamp: Date.now()
-    //         }
-    //     });
-
-    //     try {
-    //         await Promise.all(this.queue.map(transfer => this.validateTransferOperation(transfer)));
-
-    //         const txOptions = this.buildBatchTransferTxOptions(this.queue);
-    //         const result = await this.executeTransaction(txOptions);
-
-    //         // Emit events for each transfer in the batch
-    //         this.queue.forEach(transfer => {
-    //             this.emitEvent({
-    //                 type: 'transfer',
-    //                 contract: this.subnet,
-    //                 data: {
-    //                     from: transfer.signer,
-    //                     to: transfer.to,
-    //                     amount: transfer.amount,
-    //                     status: 'completed',
-    //                     txid: result.txid,
-    //                     timestamp: Date.now()
-    //                 }
-    //             });
-    //         });
-
-    //         // Clear the processed transfers from the queue
-    //         this.queue.splice(0, queueLength);
-
-    //         this.emitEvent({
-    //             type: 'batch',
-    //             contract: this.subnet,
-    //             data: {
-    //                 status: 'completed',
-    //                 txid: result.txid,
-    //                 timestamp: Date.now()
-    //             }
-    //         });
-
-    //         return result;
-    //     } catch (error) {
-    //         console.error('Error processing transfers:', error);
-
-    //         this.emitEvent({
-    //             type: 'batch',
-    //             contract: this.subnet,
-    //             data: {
-    //                 status: 'failed',
-    //                 error: error instanceof Error ? error.message : 'Unknown error',
-    //                 timestamp: Date.now()
-    //             }
-    //         });
-    //         throw error;
-    //     }
-    // }
-
-    async deposit(amount: number) {
-        this.emitEvent({
-            type: 'deposit',
-            contract: this.subnet,
-            data: {
-                from: this.signer,
-                amount,
-                status: 'pending',
-                timestamp: Date.now()
-            }
-        });
+        // Build transaction options based on transaction type
+        const txOptions = this.mempool.buildBatchTransferTxOptions(
+            txsToMine,
+            contractAddress,
+            contractName
+        );
 
         try {
-            // Apply unconfirmed change immediately
-            await this.applyUnconfirmedChange(this.signer, amount, 'deposit');
+            // Execute the batch-transfer transaction
+            const result = await this.executeTransaction(txOptions);
 
+            // Remove the processed transactions from the mempool
+            this.mempool.removeProcessedTransactions(txsToMine.length);
+
+            // Note: We no longer refresh balances here since on-chain updates take ~30 seconds
+            // Users can explicitly refresh balances when needed or wait for SSE events
+
+            return result;
+        } catch (error) {
+            console.error('Failed to mine block:', error);
+            throw error;
+        }
+    }
+
+    async deposit(amount: number) {
+        try {
+            // Build deposit transaction options
             const txOptions = buildDepositTxOptions({
                 signer: this.signer,
                 subnet: this.subnet,
                 amount,
             });
 
+            // Execute the deposit transaction
             const result = await this.executeTransaction(txOptions);
 
-            this.emitEvent({
-                type: 'deposit',
-                contract: this.subnet,
-                data: {
-                    from: this.signer,
-                    amount,
-                    status: 'completed',
-                    txid: result.txid,
-                    timestamp: Date.now()
-                }
-            });
+            // Note: We don't refresh balance here since on-chain updates take ~30 seconds
+            // Users should explicitly refresh balances when needed or wait for SSE events
 
             return result;
-        } catch (error) {
-            this.emitEvent({
-                type: 'deposit',
-                contract: this.subnet,
-                data: {
-                    from: this.signer,
-                    amount,
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    timestamp: Date.now()
-                }
-            });
+        } catch (error: unknown) {
             throw error;
         }
     }
 
     async withdraw(amount: number) {
-        this.emitEvent({
-            type: 'withdraw',
-            contract: this.subnet,
-            data: {
-                to: this.signer,
-                amount,
-                status: 'pending',
-                timestamp: Date.now()
-            }
-        });
-
         try {
-            // Apply unconfirmed change immediately
-            await this.applyUnconfirmedChange(this.signer, -amount, 'withdraw');
-
+            // Build withdraw transaction options
             const txOptions = buildWithdrawTxOptions({
                 subnet: this.subnet,
                 amount
             });
 
+            // Execute the withdraw transaction
             const result = await this.executeTransaction(txOptions);
 
-            this.emitEvent({
-                type: 'withdraw',
-                contract: this.subnet,
-                data: {
-                    to: this.signer,
-                    amount,
-                    status: 'completed',
-                    txid: result.txid,
-                    timestamp: Date.now()
-                }
-            });
+            // Note: We don't refresh balance here since on-chain updates take ~30 seconds
+            // Users should explicitly refresh balances when needed or wait for SSE events
 
             return result;
-        } catch (error) {
-            this.emitEvent({
-                type: 'withdraw',
-                contract: this.subnet,
-                data: {
-                    to: this.signer,
-                    amount,
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    timestamp: Date.now()
-                }
-            });
+        } catch (error: unknown) {
             throw error;
         }
     }
 
     async generateSignature(message: BlazeMessage): Promise<string> {
-        const domain = createBlazeDomain();
-        const clarityMessage = createBlazeMessage(message);
-
+        if (!process.env.PRIVATE_KEY) {
+            throw new Error('PRIVATE_KEY environment variable not set');
+        }
         const signature = await signStructuredData({
-            message: clarityMessage,
-            domain,
-            privateKey: this.privateKey!
+            domain: createBlazeDomain(),
+            message: createBlazeMessage(message),
+            privateKey: process.env.PRIVATE_KEY
         });
-
         return signature;
     }
 
@@ -722,7 +426,7 @@ export class Subnet {
             });
 
             return result.type === ClarityType.BoolTrue;
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Signature verification failed:', error);
             return false;
         }
@@ -745,79 +449,22 @@ export class Subnet {
         }
     }
 
-    buildBatchTransferTxOptions(operations: Transfer[]) {
-        if (!this.subnet || !operations.length) {
-            throw new Error('Invalid parameters for building batch transfer transaction');
+    /**
+     * Refresh on-chain balances for a specific user or all users in the balances Map
+     */
+    async refreshBalances(user?: string): Promise<void> {
+        if (user) {
+            // Refresh for a single user
+            await this.fetchContractBalance(user);
+        } else {
+            // Refresh for all users in the balances Map
+            const refreshPromises = Array.from(this.balances.keys()).map(address =>
+                this.fetchContractBalance(address)
+            );
+
+            if (refreshPromises.length > 0) {
+                await Promise.all(refreshPromises);
+            }
         }
-
-        const [contractAddress, contractName] = this.subnet.split('.');
-        if (!contractAddress || !contractName) {
-            throw new Error('Invalid contract format');
-        }
-
-        const clarityOperations = operations.map(op => {
-            return Cl.tuple({
-                signature: Cl.bufferFromHex(op.signature),
-                signer: Cl.principal(op.signer),
-                to: Cl.principal(op.to),
-                amount: Cl.uint(op.amount),
-                nonce: Cl.uint(op.nonce),
-            });
-        });
-
-        return {
-            contractAddress,
-            contractName,
-            functionName: 'batch-transfer',
-            functionArgs: [Cl.list(clarityOperations)],
-            senderKey: this.privateKey!,
-            network: STACKS_MAINNET,
-            fee: 1800
-        };
     }
-}
-
-export class Transaction {
-    constructor(public transfer: Transfer) {
-        console.log('New transaction:', transfer);
-    }
-
-    // this transaction has a few important roles it plays
-
-    // most importantly, it represents a possible future transaction
-    // this is helpful because until transactions are processed, they are not valid
-    // and until it is valid, we cant assume it will be added to a block
-    // but we still want to show users any possible balances that they would have
-    // if the transaction were to be added to a block
-
-    // so while it remains in the queue, it is a promise of a future transaction
-    // and we can use it to show users possible balances
-
-    // secondly, it represents a transfer operation, so when we do process the queue
-    // we can use this object to create a valid contract call to the batch-X function
-
-    // each blaze-wrapped contract will have a different set of functions
-    // but generally speaking, most public functions will have a public-<signed> counterpart
-    // which is the function that is called when a user sends a tx to the contract
-
-    // for example, fungible tokens will have a transfer-signed function
-    // which will transfer the tokens from the signer to the recipient
-    // a nft contract will have a transfer-signed function and a mint-signed function
-    // a dex pool will have a swap-signed function and so on and so forth
-
-    // so when we process the queue, we can use this object to create a valid contract call
-    // to the batch-X function
-
-    // this is important because it allows us to show users possible balances
-    // and it allows us to process transactions in a safe and secure way
-
-    // when transactions are processed, these objects are removed from the queue
-    // so either they are removed from the queue and confirm on-chain, in which case
-    // the users future balance settles to their confirmed balance (no visual change)
-    // or its removed from the queue and does not confirm on-chain, in which case
-    // the users future balance is updated to reflect the new unconfirmed balance
-
-    // so in the case that a transaction fails, this removing from the queue is a natural
-    // rollback mechanism, and the users future balance is updated to reflect the new unconfirmed balance
-
 }
