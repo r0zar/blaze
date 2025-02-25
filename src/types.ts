@@ -9,17 +9,6 @@ export enum TransactionType {
 }
 
 // Core types
-export interface Balance {
-    total: number;
-    confirmed?: number;
-    unconfirmed?: number;
-}
-
-export interface BalanceOptions {
-    includeConfirmed?: boolean;
-    includeUnconfirmed?: boolean;
-}
-
 export interface TransferOptions {
     to: string;
     amount: number;
@@ -52,7 +41,7 @@ export interface TransactionResult {
 }
 
 export interface Status {
-    subnet: string;
+    subnet: `${string}.${string}`;
     txQueue: any[]; // Using any instead of Transaction to avoid circular dependency
     lastProcessedBlock?: number;
 }
@@ -64,14 +53,15 @@ export interface BlazeMessage {
 }
 
 export interface DepositOptions {
-    subnet: string;
+    subnet: `${string}.${string}`;
     amount: number;
     signer: string;
 }
 
 export interface WithdrawOptions {
-    subnet: string;
+    subnet: `${string}.${string}`;
     amount: number;
+    signer: string;
 }
 
 export interface ServerConfig {

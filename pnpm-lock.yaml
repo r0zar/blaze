@@ -9,13 +9,13 @@ importers:
   .:
     dependencies:
       '@stacks/connect':
-        specifier: '>=7.0.0'
-        version: 7.10.1
+        specifier: latest
+        version: 8.1.3
       '@stacks/network':
-        specifier: ^7.0.2
+        specifier: latest
         version: 7.0.2
       '@stacks/transactions':
-        specifier: ^7.0.4
+        specifier: latest
         version: 7.0.4
       axios:
         specifier: ^1.0.0
@@ -290,17 +290,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@scure/base@1.1.9':
-    resolution: {integrity: sha512-8YKhl8GHiNI/pU2VMaofa2Tor7PJRAjwQLBBuilkJ9L5+13yVbC7JO/wS7piioAvPSwR3JKM1IJ/u4xQzbcXKg==}
-
-  '@scure/bip39@1.1.0':
-    resolution: {integrity: sha512-pwrPOS16VeTKg98dYXQyIjJEcWfz7/1YJIwxUEPFfQPtc86Ym/1sVgQ2RLoD43AazMk2l/unK4ITySSpW2+82w==}
+  '@scure/base@1.2.4':
+    resolution: {integrity: sha512-5Yy9czTO47mqz+/J8GM6GIId4umdCk1wc1q8rKERQulIoc8VP9pzDcghv10Tl2E7R96ZUx/PhND3ESYUQX8NuQ==}
 
   '@sinclair/typebox@0.27.8':
     resolution: {integrity: sha512-+Fj43pSMwJs4KRrH/938Uf+uAELIgVBmQzg/q1YG10djyfA3TnrU8N8XzqCh/okZdszqBQTZf96idMfE5lnwTA==}
-
-  '@stacks/auth@7.0.4':
-    resolution: {integrity: sha512-e875v255+9mKv3v5tQIRBcyvnFXvdYcAX4y/7HcVjPAVKe8IPR938zURTmMlY3yehtXMyG1G5LFizi7qERsP7A==}
 
   '@stacks/common@6.16.0':
     resolution: {integrity: sha512-PnzvhrdGRMVZvxTulitlYafSK4l02gPCBBoI9QEoTqgSnv62oaOXhYAUUkTMFKxdHW1seVEwZsrahuXiZPIAwg==}
@@ -308,14 +302,11 @@ packages:
   '@stacks/common@7.0.2':
     resolution: {integrity: sha512-+RSecHdkxOtswmE4tDDoZlYEuULpnTQVeDIG5eZ32opK8cFxf4EugAcK9CsIsHx/Se1yTEaQ21WGATmJGK84lQ==}
 
-  '@stacks/connect-ui@6.6.0':
-    resolution: {integrity: sha512-uc22RH99umYzB94h5LiKPtGu34IBGrwUb3TfijGb2ZMudaMCiv/Fr1jjZKfQW5MRmexnbAEmGZpFlQKinCcsUA==}
+  '@stacks/connect-ui@8.0.0':
+    resolution: {integrity: sha512-m8yqg28EWQCATkVxILotzbqvcnk0n+qhyncTTNEYXVe4VnfV0eRXvxX88nbA/fot1k+MuQlMu3WhrBFLHJ/xzA==}
 
-  '@stacks/connect@7.10.1':
-    resolution: {integrity: sha512-8TO5hU3W/hF57zBgKh9e9/K+9Nrj7ALQKHNH/ZgXVukDjCd6PkZVyZk9j1G8uIGW0v+gS6bK0nhxd/WGZaR8Bg==}
-
-  '@stacks/encryption@7.0.4':
-    resolution: {integrity: sha512-MIoRURjfIWN/1WpUGthY1jz7gCN/A76VV6G04MGw7Haiy1jW3Vhprf0kkoYKcQSu+NPyE9PWhaKjRXN4ZS/SwA==}
+  '@stacks/connect@8.1.3':
+    resolution: {integrity: sha512-8hcHDtPUTeh0jEmEc/gsj5uecjYl2rS5rn+wnXK0Rv1S85d29kkV7nQKrlpGrtHmcBw6Nx25PgzqaLly5oJMXg==}
 
   '@stacks/network@6.17.0':
     resolution: {integrity: sha512-numHbfKjwco/rbkGPOEz8+FcJ2nBnS/tdJ8R422Q70h3SiA9eqk9RjSzB8p4JP8yW1SZvW+eihADHfMpBuZyfw==}
@@ -442,9 +433,6 @@ packages:
   browser-request@0.3.3:
     resolution: {integrity: sha512-YyNI4qJJ+piQG6MMEuo7J3Bzaqssufx04zpEKYfSrl/1Op59HWali9zMtBpXnkmqMcOuWJPZvudrm9wISmnCbg==}
     engines: {'0': node}
-
-  bs58@5.0.0:
-    resolution: {integrity: sha512-r+ihvQJvahgYT50JD05dyJNKlmmSlMoOGwn1lCcEzanPglg7TxYjioQUYehQ9mAR/+hOSd2jRc/Z2y5UxBymvQ==}
 
   c32check@2.0.0:
     resolution: {integrity: sha512-rpwfAcS/CMqo0oCqDf3r9eeLgScRE3l/xHDCXhM3UyrfvIn7PrLq63uHh7yYbv8NzaZn5MVsVhIRpQ+5GZ5HyA==}
@@ -911,10 +899,6 @@ packages:
     engines: {node: 20 || >=22}
     hasBin: true
 
-  ripemd160-min@0.0.6:
-    resolution: {integrity: sha512-+GcJgQivhs6S9qvLogusiTcS9kQUfgR75whKuy5jIhuiOfQuJ8fjqxV6EGD5duH1Y/FawFUMtMhyeq3Fbnib8A==}
-    engines: {node: '>=8'}
-
   rollup@4.34.8:
     resolution: {integrity: sha512-489gTVMzAYdiZHFVA/ig/iYFllCcWFHMvUHI1rpFmkoUtRlQxqh6/yiNqnYibjMZ2b/+FUQwldG+aLsEt6bglQ==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
@@ -1037,9 +1021,6 @@ packages:
     resolution: {integrity: sha512-HjSDRw6gZE5JMggctHBcjVak08+KEVhSIiDzFnT9S9aegmp85S/bReBVTb4QTFaRNptJ9kuYaNhnbNEOkbKb/A==}
     deprecated: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
     hasBin: true
-
-  varuint-bitcoin@1.1.2:
-    resolution: {integrity: sha512-4EVb+w4rx+YfVM32HQX42AbbT7/1f5zwAYhIujKXKk8NQK+JfRVl3pqT3hjNn/L+RstigmGGKVwHA/P0wgITZw==}
 
   verror@1.10.0:
     resolution: {integrity: sha512-ZZKSmDAEFOijERBLkmYfJ+vmk3w+7hOLYDNkRCuRuMJGEmqYNCNLyBBFwWKVMhfwaEF3WOd0Zlw86U/WC/+nYw==}
@@ -1291,26 +1272,9 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.34.8':
     optional: true
 
-  '@scure/base@1.1.9': {}
-
-  '@scure/bip39@1.1.0':
-    dependencies:
-      '@noble/hashes': 1.1.5
-      '@scure/base': 1.1.9
+  '@scure/base@1.2.4': {}
 
   '@sinclair/typebox@0.27.8': {}
-
-  '@stacks/auth@7.0.4':
-    dependencies:
-      '@noble/secp256k1': 1.7.1
-      '@stacks/common': 7.0.2
-      '@stacks/encryption': 7.0.4
-      '@stacks/network': 7.0.2
-      '@stacks/profile': 7.0.4
-      cross-fetch: 3.2.0
-      jsontokens: 4.0.1
-    transitivePeerDependencies:
-      - encoding
 
   '@stacks/common@6.16.0':
     dependencies:
@@ -1319,34 +1283,22 @@ snapshots:
 
   '@stacks/common@7.0.2': {}
 
-  '@stacks/connect-ui@6.6.0':
+  '@stacks/connect-ui@8.0.0':
     dependencies:
       '@stencil/core': 2.22.3
 
-  '@stacks/connect@7.10.1':
+  '@stacks/connect@8.1.3':
     dependencies:
-      '@stacks/auth': 7.0.4
+      '@scure/base': 1.2.4
       '@stacks/common': 7.0.2
-      '@stacks/connect-ui': 6.6.0
+      '@stacks/connect-ui': 8.0.0
       '@stacks/network': 7.0.2
       '@stacks/network-v6': '@stacks/network@6.17.0'
       '@stacks/profile': 7.0.4
       '@stacks/transactions': 7.0.4
       '@stacks/transactions-v6': '@stacks/transactions@6.17.0'
-      jsontokens: 4.0.1
     transitivePeerDependencies:
       - encoding
-
-  '@stacks/encryption@7.0.4':
-    dependencies:
-      '@noble/hashes': 1.1.5
-      '@noble/secp256k1': 1.7.1
-      '@scure/bip39': 1.1.0
-      '@stacks/common': 7.0.2
-      base64-js: 1.5.1
-      bs58: 5.0.0
-      ripemd160-min: 0.0.6
-      varuint-bitcoin: 1.1.2
 
   '@stacks/network@6.17.0':
     dependencies:
@@ -1518,10 +1470,6 @@ snapshots:
 
   browser-request@0.3.3:
     optional: true
-
-  bs58@5.0.0:
-    dependencies:
-      base-x: 4.0.0
 
   c32check@2.0.0:
     dependencies:
@@ -2061,8 +2009,6 @@ snapshots:
       glob: 11.0.1
       package-json-from-dist: 1.0.1
 
-  ripemd160-min@0.0.6: {}
-
   rollup@4.34.8:
     dependencies:
       '@types/estree': 1.0.6
@@ -2088,7 +2034,8 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.34.8
       fsevents: 2.3.3
 
-  safe-buffer@5.2.1: {}
+  safe-buffer@5.2.1:
+    optional: true
 
   safer-buffer@2.1.2:
     optional: true
@@ -2199,10 +2146,6 @@ snapshots:
 
   uuid@3.4.0:
     optional: true
-
-  varuint-bitcoin@1.1.2:
-    dependencies:
-      safe-buffer: 5.2.1
 
   verror@1.10.0:
     dependencies:

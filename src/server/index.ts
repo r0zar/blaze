@@ -3,7 +3,7 @@ import { STACKS_MAINNET } from '@stacks/network';
 import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
 import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import { Balance, TransactionResult, Transfer, Status, BalanceOptions, BlazeMessage, BaseTransaction } from '../types';
+import { TransactionResult, Transfer, Status, BlazeMessage, BaseTransaction } from '../types';
 import { TransactionType } from '../types';
 
 /**
@@ -139,7 +139,7 @@ export class Mempool {
      * @param options Balance options
      * @returns Balance object with total, confirmed, and unconfirmed amounts
      */
-    async getBalance(user: string, options?: BalanceOptions): Promise<Balance> {
+    async getBalance(user: string): Promise<number> {
         // Ensure the user's on-chain balance is loaded
         if (!this.balances.has(user)) {
             await this.fetchContractBalance(user);
@@ -151,19 +151,7 @@ export class Mempool {
         // Calculate pending balance changes from the mempool
         const pendingChanges = this.getPendingBalanceChanges().get(user) || 0;
 
-        const balance: Balance = {
-            total: confirmedBalance + pendingChanges
-        };
-
-        if (options?.includeConfirmed) {
-            balance.confirmed = confirmedBalance;
-        }
-
-        if (options?.includeUnconfirmed) {
-            balance.unconfirmed = pendingChanges;
-        }
-
-        return balance;
+        return confirmedBalance + pendingChanges;
     }
 
     /**
@@ -190,7 +178,7 @@ export class Mempool {
 }
 
 export class Subnet {
-    subnet: string;
+    subnet: `${string}.${string}`;
     tokenIdentifier: string;
     signer: string;
     balances: Map<string, number> = new Map();
@@ -275,9 +263,9 @@ export class Subnet {
     /**
      * Get a user's complete balance information
      */
-    async getBalance(user?: string, options?: BalanceOptions): Promise<Balance> {
+    async getBalance(user?: string): Promise<number> {
         const address = user || this.signer;
-        return this.mempool.getBalance(address, options);
+        return this.mempool.getBalance(address);
     }
 
     private async executeTransaction(txOptions: any): Promise<TransactionResult> {
@@ -380,7 +368,8 @@ export class Subnet {
             // Build withdraw transaction options
             const txOptions = buildWithdrawTxOptions({
                 subnet: this.subnet,
-                amount
+                amount,
+                signer: this.signer
             });
 
             // Execute the withdraw transaction
