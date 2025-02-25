@@ -45,9 +45,9 @@
     "web3"
   ],
   "dependencies": {
-    "@stacks/connect": "latest",
-    "@stacks/network": "latest",
-    "@stacks/transactions": "latest",
+    "@stacks/connect": ">=7.0.0",
+    "@stacks/network": "^7.0.2",
+    "@stacks/transactions": "^7.0.4",
     "axios": "^1.0.0"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 import { STACKS_MAINNET } from '@stacks/network';
-import { openStructuredDataSignatureRequestPopup, showConnect, FinishedAuthData, getOrCreateUserSession } from '@stacks/connect';
+import { openStructuredDataSignatureRequestPopup } from '@stacks/connect';
 import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
 import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
@@ -15,18 +15,16 @@ export class Blaze {
     subnet: string;
     tokenIdentifier: string;
     signer: string;
-    nodeUrl: string;
     isServerSide: boolean;
     endpoints: {
         transfer: string;
         refresh: string;
     };
 
-    constructor(options?: { nodeUrl?: string, subnet?: string }) {
-        this.signer = '';
-        this.nodeUrl = options?.nodeUrl || 'https://charisma.rocks/api/v0/blaze';
+    constructor(options: { signer: string, subnet: string }) {
+        this.signer = options.signer;
         this.isServerSide = !isBrowser;
-        this.subnet = options?.subnet || WELSH;
+        this.subnet = options.subnet;
         this.endpoints = {
             transfer: `/api/process`,
             refresh: `/api/refresh-balance`,
@@ -47,91 +45,57 @@ export class Blaze {
      * Connect to a wallet using Stacks Connect
      * @returns Connected wallet address or empty string if connection failed
      */
-    public async connectWallet(): Promise<string> {
-        if (getOrCreateUserSession().isUserSignedIn()) {
-            return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet;
-        }
-
-        try {
-            return new Promise((resolve) => {
-                showConnect({
-                    appDetails: {
-                        name: 'Blaze Subnets',
-                        icon: 'https://charisma.rocks/charisma.png',
-                    },
-                    onFinish: (data: FinishedAuthData) => {
-                        this.signer = data.userSession.loadUserData().profile.stxAddress.mainnet;
-                        resolve(data.userSession.loadUserData().profile.stxAddress.mainnet);
-                    },
-                    onCancel: () => {
-                        resolve('');
-                    },
-                    userSession: undefined,
-                });
-            });
-        } catch (error) {
-            console.error('Error connecting wallet:', error);
-            return '';
-        }
-    }
+    // public async connectWallet(): Promise<string> {
+    //     try {
+    //         return new Promise((resolve) => {
+    //             showConnect({
+    //                 appDetails: {
+    //                     name: 'Blaze Subnets',
+    //                     icon: 'https://charisma.rocks/charisma.png',
+    //                 },
+    //                 onFinish: (data: FinishedAuthData) => {
+    //                     this.signer = data.userSession.loadUserData().profile.stxAddress.mainnet;
+    //                     resolve(data.userSession.loadUserData().profile.stxAddress.mainnet);
+    //                 },
+    //                 onCancel: () => {
+    //                     resolve('');
+    //                 },
+    //                 userSession: undefined,
+    //             });
+    //         });
+    //     } catch (error) {
+    //         console.error('Error connecting wallet:', error);
+    //         return '';
+    //     }
+    // }
 
     /**
      * Disconnect current wallet
      */
-    public disconnectWallet() {
-        this.signer = '';
-        getOrCreateUserSession().signUserOut()
-    }
+    // public disconnectWallet() {
+    //     this.signer = '';
+    //     getOrCreateUserSession().signUserOut()
+    // }
 
     /**
      * Check if wallet is connected
      * @returns True if wallet is connected
      */
-    public isWalletConnected(): boolean {
-        return getOrCreateUserSession().isUserSignedIn()
-    }
+    // public isWalletConnected(): boolean {
+    //     if (this.signer) {
+    //         return true;
+    //     } else {
+    //         return false;
+    //     }
+    // }
 
     /**
      * Get current wallet address
      * @returns Connected wallet address
      */
-    public getWalletAddress(): string {
-        return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet
-    }
-
-    /**
-     * Get user's balance from the subnet
-     * @returns User balance as a number
-     */
-    async getBalance(): Promise<number> {
-        if (!this.isWalletConnected()) {
-            this.signer = await this.connectWallet();
-        }
-
-        // Fetch from server
-        const response = await axios.get(`${this.nodeUrl}/subnets/${this.subnet}/balances/${this.signer}`);
-
-        // Return just the numeric balance value
-        return response.data.total || 0;
-    }
-
-    /**
-     * Refresh balance from server - fetches the latest on-chain balance
-     * @returns Updated balance as a number
-     */
-    async refreshBalance(): Promise<number> {
-        if (!this.isWalletConnected()) {
-            this.signer = await this.connectWallet();
-        }
-
-        // Request the server to refresh the on-chain balance first
-        await axios.post(`${this.nodeUrl}/subnets/${this.subnet}/refresh-balance`, {
-            user: this.signer
-        });
-
-        // Then get the updated balance
-        return this.getBalance();
-    }
+    // public getWalletAddress(): string {
+    //     return getOrCreateUserSession().loadUserData().profile.stxAddress.mainnet
+    // }
 
     /**
      * Transfer tokens to another address
@@ -140,14 +104,13 @@ export class Blaze {
      * @returns Transaction result
      */
     async transfer(options: TransferOptions) {
-        if (!this.isWalletConnected()) {
-            this.signer = await this.connectWallet();
-        }
 
         const nextNonce = Date.now();
         const result: any = await new Promise((resolve) => {
+            const domain = createBlazeDomain();
+            console.log({ domain });
             openStructuredDataSignatureRequestPopup({
-                domain: createBlazeDomain(),
+                domain,
                 message: createBlazeMessage({ to: options.to, amount: options.amount, nonce: nextNonce }),
                 network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
@@ -181,9 +144,6 @@ export class Blaze {
      * @returns Transaction result with txid
      */
     async deposit(amount: number): Promise<TransactionResult> {
-        if (!this.isWalletConnected()) {
-            this.signer = await this.connectWallet();
-        }
 
         const txOptions = buildDepositTxOptions({ subnet: this.subnet, amount, signer: this.signer });
 
@@ -211,9 +171,6 @@ export class Blaze {
      * @returns Transaction result with txid
      */
     async withdraw(amount: number): Promise<TransactionResult> {
-        if (!this.isWalletConnected()) {
-            this.signer = await this.connectWallet();
-        }
 
         const txOptions = buildWithdrawTxOptions({ subnet: this.subnet, amount });
 

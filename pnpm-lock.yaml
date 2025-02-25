@@ -9,13 +9,13 @@ importers:
   .:
     dependencies:
       '@stacks/connect':
-        specifier: '>7.0.0'
+        specifier: '>=7.0.0'
         version: 7.10.1
       '@stacks/network':
-        specifier: 7.0.2
+        specifier: ^7.0.2
         version: 7.0.2
       '@stacks/transactions':
-        specifier: 7.0.4
+        specifier: ^7.0.4
         version: 7.0.4
       axios:
         specifier: ^1.0.0
