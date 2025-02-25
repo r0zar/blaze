@@ -148,7 +148,7 @@ export class Blaze {
         const result: any = await new Promise((resolve) => {
             openStructuredDataSignatureRequestPopup({
                 domain: createBlazeDomain(),
-                message: createBlazeMessage({ ...options, nonce: nextNonce }),
+                message: createBlazeMessage({ to: options.to, amount: options.amount, nonce: nextNonce }),
                 network: STACKS_MAINNET,
                 onFinish: (data) => resolve(data),
                 onCancel: () => resolve(null)
@@ -161,7 +161,8 @@ export class Blaze {
         const transfer: Transfer = {
             signature,
             signer: this.signer,
-            ...options,
+            to: options.to,
+            amount: options.amount,
             nonce: nextNonce,
         };
 
