@@ -80,6 +80,7 @@ export class Blaze {
      */
     public disconnectWallet() {
         this.signer = '';
+        getOrCreateUserSession().signUserOut()
     }
 
     /**
