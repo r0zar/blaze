@@ -104,7 +104,7 @@ export class Blaze {
      * @returns User balance as a number
      */
     async getBalance(): Promise<number> {
-        if (!this.signer) {
+        if (!this.isWalletConnected()) {
             this.signer = await this.connectWallet();
         }
 
@@ -120,7 +120,7 @@ export class Blaze {
      * @returns Updated balance as a number
      */
     async refreshBalance(): Promise<number> {
-        if (!this.signer) {
+        if (!this.isWalletConnected()) {
             this.signer = await this.connectWallet();
         }
 
@@ -140,7 +140,7 @@ export class Blaze {
      * @returns Transaction result
      */
     async transfer(options: TransferOptions) {
-        if (!this.signer) {
+        if (!this.isWalletConnected()) {
             this.signer = await this.connectWallet();
         }
 
@@ -181,7 +181,7 @@ export class Blaze {
      * @returns Transaction result with txid
      */
     async deposit(amount: number): Promise<TransactionResult> {
-        if (!this.signer) {
+        if (!this.isWalletConnected()) {
             this.signer = await this.connectWallet();
         }
 
@@ -211,7 +211,7 @@ export class Blaze {
      * @returns Transaction result with txid
      */
     async withdraw(amount: number): Promise<TransactionResult> {
-        if (!this.signer) {
+        if (!this.isWalletConnected()) {
             this.signer = await this.connectWallet();
         }
 
