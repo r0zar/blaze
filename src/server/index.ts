@@ -61,6 +61,13 @@ export class Mempool {
     }
 
     /**
+     * Clear the transaction queue
+     */
+    clearQueue(): void {
+        this.queue = [];
+    }
+
+    /**
      * Add a transaction to the mempool
      */
     addTransaction(transaction: Transaction): void {
@@ -284,7 +291,7 @@ export class Subnet {
             network: STACKS_MAINNET,
         });
 
-        if ('error' in response) throw new Error(response.error);
+        if ('error' in response) console.error(response.error);
         return { txid: response.txid };
     }
 

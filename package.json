@@ -48,7 +48,8 @@
     "@stacks/connect": "latest",
     "@stacks/network": "latest",
     "@stacks/transactions": "latest",
-    "axios": "^1.0.0"
+    "axios": "^1.0.0",
+    "react-hot-toast": "^2.5.2"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
