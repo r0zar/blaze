@@ -172,6 +172,9 @@ export class Mempool {
         // Build the clarity operations for batch transfer
         const clarityOperations = txsToMine.map(tx => tx.toClarityValue());
 
+        // Calculate the fee based on the number of transactions
+        const fee = 400 * txsToMine.length;
+
         // Build transaction options
         return {
             contractAddress,
@@ -179,7 +182,7 @@ export class Mempool {
             functionName: 'batch-transfer',
             functionArgs: [Cl.list(clarityOperations)],
             network: STACKS_MAINNET,
-            fee: 1800
+            fee
         };
     }
 }
@@ -286,13 +289,12 @@ export class Subnet {
             network: STACKS_MAINNET,
         });
 
-        const response: TxBroadcastResult = await broadcastTransaction({
+        const response = await broadcastTransaction({
             transaction,
             network: STACKS_MAINNET,
         });
 
-        if ('error' in response) console.error(response.error);
-        return { txid: response.txid };
+        return response
     }
 
     public async processTxRequest(txRequest: Transfer) {
