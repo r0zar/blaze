@@ -1,9 +1,9 @@
 import { makeContractCall, broadcastTransaction, TxBroadcastResult, signStructuredData, fetchCallReadOnlyFunction, Cl, ClarityType, createContractCallPayload, PostCondition } from '@stacks/transactions';
 import { STACKS_MAINNET } from '@stacks/network';
-import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
+import { createWelshDomain, createTransferhMessage } from '../shared/messages';
 import { subnetTokens, WELSH } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import { TransactionResult, Transfer, Status, BlazeMessage, BaseTransaction } from '../types';
+import { TransactionResult, Transfer, Prediction, ClaimReward, Status, TransferMessage, BaseTransaction, TransactionRequest } from '../types';
 import { TransactionType } from '../types';
 
 /**
@@ -12,10 +12,22 @@ import { TransactionType } from '../types';
 export class Transaction implements BaseTransaction {
     type: TransactionType;
     affectedUsers: string[];
+    data: TransactionRequest;
+    batchFunction: string;
 
-    constructor(public transfer: Transfer) {
-        this.type = TransactionType.TRANSFER;
-        this.affectedUsers = [transfer.signer, transfer.to];
+    constructor(data: TransactionRequest) {
+        this.data = data;
+        this.type = data.type;
+        this.batchFunction = `signed-${this.type}`;
+
+        // Set affected users based on transaction type
+        if (this.type === TransactionType.TRANSFER) {
+            const transfer = data as Transfer;
+            this.affectedUsers = [transfer.signer, transfer.to];
+        } else {
+            // For other types, only the signer is affected
+            this.affectedUsers = [data.signer];
+        }
     }
 
     /**
@@ -24,8 +36,18 @@ export class Transaction implements BaseTransaction {
      */
     getBalanceChanges(): Map<string, number> {
         const changes = new Map<string, number>();
-        changes.set(this.transfer.signer, -this.transfer.amount);
-        changes.set(this.transfer.to, this.transfer.amount);
+
+        if (this.type === TransactionType.TRANSFER) {
+            const transfer = this.data as Transfer;
+            changes.set(transfer.signer, -transfer.amount);
+            changes.set(transfer.to, transfer.amount);
+        } else if (this.type === TransactionType.PREDICT) {
+            const prediction = this.data as Prediction;
+            changes.set(prediction.signer, -prediction.amount);
+        }
+        // For claim reward, we don't include it in balance changes
+        // since we can't predict the exact amount without contract lookup
+
         return changes;
     }
 
@@ -34,13 +56,43 @@ export class Transaction implements BaseTransaction {
      * @returns Clarity tuple for the transaction
      */
     toClarityValue(): any {
-        return Cl.tuple({
-            signature: Cl.bufferFromHex(this.transfer.signature),
-            signer: Cl.principal(this.transfer.signer),
-            to: Cl.principal(this.transfer.to),
-            amount: Cl.uint(this.transfer.amount),
-            nonce: Cl.uint(this.transfer.nonce),
-        });
+        switch (this.type) {
+            case TransactionType.TRANSFER: {
+                const transfer = this.data as Transfer;
+                return Cl.tuple({
+                    signet: Cl.tuple({
+                        signature: Cl.bufferFromHex(transfer.signature),
+                        nonce: Cl.uint(transfer.nonce)
+                    }),
+                    to: Cl.principal(transfer.to),
+                    amount: Cl.uint(transfer.amount)
+                });
+            }
+            case TransactionType.PREDICT: {
+                const prediction = this.data as Prediction;
+                return Cl.tuple({
+                    signet: Cl.tuple({
+                        signature: Cl.bufferFromHex(prediction.signature),
+                        nonce: Cl.uint(prediction.nonce)
+                    }),
+                    market_id: Cl.uint(prediction.marketId),
+                    outcome_id: Cl.uint(prediction.outcomeId),
+                    amount: Cl.uint(prediction.amount)
+                });
+            }
+            case TransactionType.CLAIM_REWARD: {
+                const claim = this.data as ClaimReward;
+                return Cl.tuple({
+                    signet: Cl.tuple({
+                        signature: Cl.bufferFromHex(claim.signature),
+                        nonce: Cl.uint(claim.nonce)
+                    }),
+                    receipt_id: Cl.uint(claim.receiptId)
+                });
+            }
+            default:
+                throw new Error(`Cannot convert transaction type ${this.type} to Clarity value`);
+        }
     }
 }
 
@@ -124,27 +176,46 @@ export class Mempool {
     }
 
     /**
-     * Get the first batch of transactions to process (up to maxBatchSize)
-     * @param maxBatchSize Maximum number of transactions to include in a block
-     * @returns Array of transactions to process
+     * Get transactions of a specific type (up to maxBatchSize)
+     * @param type Transaction type to filter
+     * @param maxBatchSize Maximum number of transactions to include
+     * @returns Array of transactions of the specified type
      */
-    getBatchToMine(maxBatchSize: number = 200): Transaction[] {
-        return this.queue.slice(0, maxBatchSize);
+    getBatchByType(type: TransactionType, maxBatchSize: number = 200): Transaction[] {
+        return this.queue
+            .filter(tx => tx.type === type)
+            .slice(0, maxBatchSize);
     }
 
     /**
-     * Remove processed transactions from the mempool
-     * @param count Number of transactions to remove
+     * Group transactions by type
+     * @returns Map of transaction types to arrays of transactions
      */
-    removeProcessedTransactions(count: number): void {
-        this.queue.splice(0, count);
+    getTransactionsByType(): Map<TransactionType, Transaction[]> {
+        const txByType = new Map<TransactionType, Transaction[]>();
+
+        this.queue.forEach(tx => {
+            const txs = txByType.get(tx.type) || [];
+            txs.push(tx);
+            txByType.set(tx.type, txs);
+        });
+
+        return txByType;
+    }
+
+    /**
+     * Remove transactions from the queue
+     * @param transactions Array of transactions to remove
+     */
+    removeTransactions(transactions: Transaction[]): void {
+        const txSet = new Set(transactions);
+        this.queue = this.queue.filter(tx => !txSet.has(tx));
     }
 
     /**
      * Get the balance for a specific user, including pending transactions
      * @param user User address
-     * @param options Balance options
-     * @returns Balance object with total, confirmed, and unconfirmed amounts
+     * @returns Balance for the user
      */
     async getBalance(user: string): Promise<number> {
         // Ensure the user's on-chain balance is loaded
@@ -162,14 +233,21 @@ export class Mempool {
     }
 
     /**
-     * Build batch transfer transaction options for the current contract
+     * Build batch transaction options for a set of transactions
      * @param txsToMine Array of transactions to include in the batch
+     * @param txType Type of transactions being processed
      * @param contractAddress Contract address
      * @param contractName Contract name
-     * @returns Transaction options for the batch transfer
+     * @param functionName Name of the batch function to call
+     * @returns Transaction options for the batch operation
      */
-    buildBatchTransferTxOptions(txsToMine: Transaction[], contractAddress: string, contractName: string): any {
-        // Build the clarity operations for batch transfer
+    buildBatchTxOptions(
+        txsToMine: Transaction[],
+        txType: TransactionType,
+        contractAddress: string,
+        contractName: string,
+    ): any {
+        // Build the clarity operations for the batch
         const clarityOperations = txsToMine.map(tx => tx.toClarityValue());
 
         // Calculate the fee based on the number of transactions
@@ -179,7 +257,7 @@ export class Mempool {
         return {
             contractAddress,
             contractName,
-            functionName: 'batch-transfer',
+            functionName: `batch-${txType}`,
             functionArgs: [Cl.list(clarityOperations)],
             network: STACKS_MAINNET,
             fee
@@ -297,15 +375,30 @@ export class Subnet {
         return response
     }
 
-    public async processTxRequest(txRequest: Transfer) {
-        await this.validateTransferOperation(txRequest);
-        // create a new Transaction object and put it in the queue
+    public async processTxRequest(txRequest: TransactionRequest) {
+        // Validate based on transaction type
+        switch (txRequest.type) {
+            case TransactionType.TRANSFER:
+                await this.validateTransferOperation(txRequest as Transfer);
+                break;
+            case TransactionType.PREDICT:
+                await this.validatePredictionOperation(txRequest as Prediction);
+                break;
+            case TransactionType.CLAIM_REWARD:
+                await this.validateClaimOperation(txRequest as ClaimReward);
+                break;
+            default:
+                throw new Error(`Unknown transaction type: ${txRequest.type}`);
+        }
+
+        // Create a new Transaction object and put it in the queue
         const transaction = new Transaction(txRequest);
         this.mempool.addTransaction(transaction);
     }
 
     /**
-     * Process transactions from the mempool and mine a new block by executing a batch transfer
+     * Process transactions from the mempool and mine a new block
+     * Groups transactions by type and processes each group separately
      * @param batchSize Optional number of transactions to process (default: up to 200)
      * @returns Transaction result containing the txid if successful
      */
@@ -317,38 +410,49 @@ export class Subnet {
             throw new Error('No transactions to mine');
         }
 
-        // Get contract details from subnet identifier (e.g. "ST1234.my-contract")
-        const [contractAddress, contractName] = this.subnet.split('.');
-        if (!contractAddress || !contractName) {
-            throw new Error('Invalid contract format');
-        }
-
-        // Get transactions that will be settled (up to batchSize or 200)
+        // Group transactions by type
+        const txByType = this.mempool.getTransactionsByType();
         const maxBatchSize = batchSize || 200;
-        const txsToMine = this.mempool.getBatchToMine(maxBatchSize);
 
-        // Build transaction options based on transaction type
-        const txOptions = this.mempool.buildBatchTransferTxOptions(
-            txsToMine,
-            contractAddress,
-            contractName
-        );
+        // Process each type of transaction separately
+        for (const [txType, txs] of txByType.entries()) {
+            if (txs.length === 0) continue;
 
-        try {
-            // Execute the batch-transfer transaction
-            const result = await this.executeTransaction(txOptions);
+            // Get the contract info for this transaction type
+            const [contractAddress, contractName] = this.subnet.split('.');
 
-            // Remove the processed transactions from the mempool
-            this.mempool.removeProcessedTransactions(txsToMine.length);
+            if (!contractAddress || !contractName) {
+                console.error(`Invalid contract format for ${txType}`);
+                continue;
+            }
 
-            // Note: We no longer refresh balances here since on-chain updates take ~30 seconds
-            // Users can explicitly refresh balances when needed or wait for SSE events
+            // Get transactions to mine (up to batch size)
+            const txsToMine = txs.slice(0, maxBatchSize);
 
-            return result;
-        } catch (error) {
-            console.error('Failed to mine block:', error);
-            throw error;
+            // Build transaction options
+            const txOptions = this.mempool.buildBatchTxOptions(
+                txsToMine,
+                txType,
+                contractAddress,
+                contractName,
+            );
+
+            try {
+                // Execute the batch transaction
+                const result = await this.executeTransaction(txOptions);
+
+                // Remove the processed transactions from the mempool
+                this.mempool.removeTransactions(txsToMine);
+
+                // Return after processing one batch - we can process more in the next mine call
+                return result;
+            } catch (error) {
+                console.error(`Failed to mine ${txType} transactions:`, error);
+                // Continue with next transaction type
+            }
         }
+
+        throw new Error('Failed to mine any transactions');
     }
 
     async deposit(amount: number) {
@@ -393,39 +497,74 @@ export class Subnet {
         }
     }
 
-    async generateSignature(message: BlazeMessage): Promise<string> {
+    async generateSignature(message: TransferMessage): Promise<string> {
         if (!process.env.PRIVATE_KEY) {
             throw new Error('PRIVATE_KEY environment variable not set');
         }
         const signature = await signStructuredData({
-            domain: createBlazeDomain(),
-            message: createBlazeMessage(message),
+            domain: createWelshDomain(),
+            message: createTransferhMessage(message),
             privateKey: process.env.PRIVATE_KEY
         });
         return signature;
     }
 
-    async verifySignature(transfer: Transfer): Promise<boolean> {
+    async verifyTransferSignature(data: Transfer | Prediction): Promise<boolean> {
+        const [contractAddress, contractName] = this.subnet.split('.');
+        try {
+            // Determine recipient based on transaction type
+            const recipient = data.type === TransactionType.TRANSFER
+                ? (data as Transfer).to
+                : this.subnet
+
+            const amount = data.type === TransactionType.TRANSFER
+                ? (data as Transfer).amount
+                : (data as Prediction).amount;
+
+            const result = await fetchCallReadOnlyFunction({
+                contractAddress,
+                contractName,
+                functionName: 'verify-transfer-signer',
+                functionArgs: [
+                    Cl.tuple({
+                        signature: Cl.bufferFromHex(data.signature),
+                        nonce: Cl.uint(data.nonce)
+                    }),
+                    Cl.principal(recipient),
+                    Cl.uint(amount)
+                ],
+                network: STACKS_MAINNET,
+                senderAddress: data.signer
+            });
+
+            return result.type === ClarityType.ResponseOk;
+        } catch (error: unknown) {
+            console.error('Transfer signature verification failed:', error);
+            return false;
+        }
+    }
+
+    async verifyClaimSignature(claim: ClaimReward): Promise<boolean> {
         const [contractAddress, contractName] = this.subnet.split('.');
         try {
             const result = await fetchCallReadOnlyFunction({
                 contractAddress,
                 contractName,
-                functionName: 'verify-signature',
+                functionName: 'verify-receipt-signer',
                 functionArgs: [
-                    Cl.bufferFromHex(transfer.signature),
-                    Cl.principal(transfer.signer),
-                    Cl.principal(transfer.to),
-                    Cl.uint(transfer.amount),
-                    Cl.uint(transfer.nonce)
+                    Cl.tuple({
+                        signature: Cl.bufferFromHex(claim.signature),
+                        nonce: Cl.uint(claim.nonce)
+                    }),
+                    Cl.uint(claim.receiptId)
                 ],
                 network: STACKS_MAINNET,
-                senderAddress: transfer.signer
+                senderAddress: claim.signer
             });
 
-            return result.type === ClarityType.BoolTrue;
+            return result.type === ClarityType.ResponseOk;
         } catch (error: unknown) {
-            console.error('Signature verification failed:', error);
+            console.error('Claim signature verification failed:', error);
             return false;
         }
     }
@@ -441,9 +580,49 @@ export class Subnet {
             throw new Error('Invalid transfer operation: nonce must be positive');
         }
         // Verify signature
-        const isValid = await this.verifySignature(operation);
+        const isValid = await this.verifyTransferSignature(operation);
         if (!isValid) {
             throw new Error('Invalid transfer operation: signature verification failed');
+        }
+    }
+
+    async validatePredictionOperation(operation: Prediction): Promise<void> {
+        if (!operation.signer || !operation.signature) {
+            throw new Error('Invalid prediction operation: missing required fields');
+        }
+        if (operation.amount <= 0) {
+            throw new Error('Invalid prediction operation: amount must be positive');
+        }
+        if (operation.nonce <= 0) {
+            throw new Error('Invalid prediction operation: nonce must be positive');
+        }
+        if (operation.marketId < 0 || operation.outcomeId < 0) {
+            throw new Error('Invalid prediction operation: market/outcome IDs must be positive');
+        }
+
+        // Verify signature using the same method as transfers
+        // since predictions use the same token transfer signature
+        const isValid = await this.verifyTransferSignature(operation);
+        if (!isValid) {
+            throw new Error('Invalid prediction operation: signature verification failed');
+        }
+    }
+
+    async validateClaimOperation(operation: ClaimReward): Promise<void> {
+        if (!operation.signer || !operation.signature) {
+            throw new Error('Invalid claim operation: missing required fields');
+        }
+        if (operation.nonce <= 0) {
+            throw new Error('Invalid claim operation: nonce must be positive');
+        }
+        if (operation.receiptId <= 0) {
+            throw new Error('Invalid claim operation: receipt ID must be positive');
+        }
+
+        // Verify claim signature with the receipt verification function
+        const isValid = await this.verifyClaimSignature(operation);
+        if (!isValid) {
+            throw new Error('Invalid claim operation: signature verification failed');
         }
     }
 

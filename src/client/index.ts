@@ -1,9 +1,24 @@
 import { STACKS_MAINNET } from '@stacks/network';
 import { connect, disconnect, isConnected, request, getLocalStorage } from '@stacks/connect';
-import { createBlazeDomain, createBlazeMessage } from '../shared/messages';
-import { subnetTokens, WELSH } from '../shared/utils';
+import {
+    createWelshDomain,
+    createWelshPredictionDomain,
+    createTransferhMessage,
+    createPredictionMessage,
+    createClaimRewardMessage
+} from '../shared/messages';
+import { subnetTokens, WELSH, PREDICTIONS } from '../shared/utils';
 import { buildDepositTxOptions, buildWithdrawTxOptions } from '../shared/transactions';
-import type { TransferOptions, Transfer, TransactionResult } from '../types';
+import {
+    type TransferOptions,
+    type PredictionOptions,
+    type ClaimRewardOptions,
+    type Transfer,
+    type Prediction,
+    type ClaimReward,
+    type TransactionResult,
+    TransactionType
+} from '../types';
 import { isBrowser } from '../shared/utils';
 import axios from 'axios';
 
@@ -19,6 +34,8 @@ export class Blaze {
     isServerSide: boolean;
     endpoints: {
         transfer: string;
+        predict: string;
+        claim: string;
         refresh: string;
     };
 
@@ -30,6 +47,8 @@ export class Blaze {
         this.subnet = options?.subnet || WELSH;
         this.endpoints = {
             transfer: `/api/process`,
+            predict: `/api/process`,
+            claim: `/api/process`,
             refresh: `/api/refresh-balance`,
         };
 
@@ -131,14 +150,15 @@ export class Blaze {
 
         const nextNonce = Date.now();
         const result = await request('stx_signStructuredMessage', {
-            domain: createBlazeDomain(),
-            message: createBlazeMessage({ ...options, nonce: nextNonce }),
+            domain: createWelshDomain(),
+            message: createTransferhMessage({ ...options, nonce: nextNonce }),
         });
 
         if (!result?.signature) console.error('User cancelled or signing failed');
         const signature = result.signature;
 
         const transfer: Transfer = {
+            type: TransactionType.TRANSFER,
             signature,
             signer: this.signer,
             ...options,
