@@ -34,84 +34,72 @@ yarn add blaze-sdk
 pnpm add blaze-sdk
 ```
 
-## 🔍 Basic Usage
+## 🚦 Getting Started
 
-### Reading State (No Private Key Required)
+### Creating Your First Client
 
-```typescript
-import { createReadOnlyClient } from 'blaze-sdk';
-
-// Create a client for reading state
-const client = createReadOnlyClient();
-
-// Read token balance from any contract
-async function getBalance(address) {
-  const result = await client.call(
-    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-    'get-balance',
-    [address]
-  );
-  
-  return result;
-}
-
-// The SDK automatically tries:
-// 1. Memory cache (instant)
-// 2. L2 service (fast)
-// 3. Blockchain (slowest but authoritative)
-```
-
-### Writing State (Private Key Required)
+First, import the necessary components and create a client using the core `UnifiedClient` class or the helper function:
 
 ```typescript
-import { createL2Client } from 'blaze-sdk';
+// Using the UnifiedClient class directly
+import { UnifiedClient } from 'blaze-sdk';
 
-// Initialize a client with L2 and blockchain support
-const client = createL2Client({
-  signer: {
-    getAddress: () => 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE',
-    signMessage: async (message) => {
-      // Your signing logic here
-      return signature;
-    }
-  }
+const client = new UnifiedClient({
+  apiKey: 'your-api-key', 
+  network: 'mainnet'
 });
 
-// Send tokens
-async function transfer(to, amount) {
-  const receipt = await client.execute(
-    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-    'transfer',
-    [to, amount],
-    { optimistic: true } // Update state immediately for UI
-  );
-  
-  return receipt;
-}
+// Or using a helper function
+import { createClient } from 'blaze-sdk';
+
+const client = createClient({
+  apiKey: 'your-api-key', 
+  network: 'mainnet'
+});
 ```
 
-### Integrating with L2 Services
+### Reading Blockchain State
+
+The SDK provides a unified interface for reading state from any source (cache, L2, or blockchain):
 
 ```typescript
-import { createL2Client } from 'blaze-sdk';
-
-// Create a client with L2 service priority
-const client = createL2Client({
-  l2Service: {
-    url: 'https://l2.example.com/api',
-    apiKey: 'your-api-key'
-  },
-  
-  // Will fallback to blockchain if L2 is unavailable
-  fallback: true
-});
-
-// The SDK will automatically try L2 first, then blockchain
+// Read a token balance
 const balance = await client.call(
   'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-  'get-balance',
+  'get-balance', 
   ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE']
 );
+
+console.log(`Balance: ${balance}`);
+```
+
+### Writing to the Blockchain
+
+To perform write operations, include your private key when creating the client:
+
+```typescript
+import { UnifiedClient } from 'blaze-sdk';
+
+// Client with write capabilities
+const client = new UnifiedClient({
+  privateKey: 'your-private-key',
+  apiKey: 'your-api-key',
+  network: 'mainnet'
+});
+
+// Transfer tokens
+const result = await client.execute(
+  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
+  'transfer',
+  [
+    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS', // sender
+    'ST3KCNDSWZSFZCC6BE4VA9AXWXC9KEB16FBTRK36T', // recipient
+    1000, // amount
+    'Payment for services' // memo
+  ]
+);
+
+console.log(`Transaction ID: ${result.txId}`);
 ```
 
 ## 🏗️ Architecture
@@ -131,6 +119,137 @@ The SDK is built around a message-centric architecture with these key components
   - **L2Processor** - Interfaces with off-chain services
   - **StacksProcessor** - Reads from and writes to the blockchain
 
+## 🧩 Example Applications
+
+The SDK includes example implementations that demonstrate how to build different types of applications. These examples are not part of the core SDK but show how you can create your own application-specific classes using the SDK.
+
+### DeFi Wallet Example
+
+The SDK includes a `DeFiWallet` implementation in the examples directory that shows how to build a wallet with token management capabilities:
+
+```typescript
+// This example shows how you could build your own DeFi wallet class
+// using the core Blaze SDK components
+import { createClient, createL2Client, L2Service } from 'blaze-sdk';
+
+// Create your own L2 service implementation
+class MyL2Service implements L2Service {
+  // Implement the L2Service interface methods...
+}
+
+// Create a DeFi wallet class
+class MyDeFiWallet {
+  private client;
+  
+  constructor(options) {
+    // Use the SDK to create a client with L2 capabilities
+    this.client = createL2Client({
+      privateKey: options.privateKey,
+      l2Service: new MyL2Service(options.l2Endpoint),
+      apiKey: options.apiKey
+    });
+  }
+  
+  async getBalance(tokenContract) {
+    // Use the client to call blockchain functions
+    return this.client.call(tokenContract, 'get-balance', [this.client.getAddress()]);
+  }
+  
+  async transfer(tokenContract, recipient, amount, memo) {
+    // Execute a blockchain transaction
+    return this.client.execute(tokenContract, 'transfer', [recipient, amount, memo]);
+  }
+}
+
+// Usage
+const wallet = new MyDeFiWallet({
+  privateKey: 'your-private-key',
+  l2Endpoint: 'https://l2.example.com/api',
+  apiKey: 'your-api-key'
+});
+```
+
+For a complete implementation, see the [DeFi Wallet Example](./examples/defi-wallet.ts).
+
+### NFT Marketplace Example
+
+The SDK includes an example NFT marketplace implementation that shows how to create, list, and buy NFTs:
+
+```typescript
+// Core SDK components you'll use to build an NFT marketplace
+import { createClient, UnifiedClient } from 'blaze-sdk';
+
+// Create your own marketplace using the UnifiedClient
+class MyNFTMarketplace {
+  private client: UnifiedClient;
+  private marketplaceContract: string;
+  
+  constructor(options) {
+    // Create a client using the SDK
+    this.client = createClient({
+      privateKey: options.privateKey,
+      apiKey: options.apiKey
+    });
+    
+    this.marketplaceContract = options.marketplaceContract;
+  }
+  
+  // Implement marketplace functions using the client
+  async getActiveListings(limit = 20) {
+    return this.client.call(
+      this.marketplaceContract,
+      'get-active-listings',
+      [limit]
+    );
+  }
+  
+  async createListing(nftContract, tokenId, price, expirationDays) {
+    // Execute the marketplace function
+    return this.client.execute(
+      this.marketplaceContract, 
+      'create-listing',
+      [nftContract, tokenId, price, expirationDays]
+    );
+  }
+}
+```
+
+For a complete implementation, see the [NFT Marketplace Example](./examples/nft-marketplace.ts).
+
+### Social Media Example
+
+The SDK includes an example social media application that shows how to create profiles, posts, and interactions:
+
+```typescript
+// Core SDK components for building a social media application
+import { createClient } from 'blaze-sdk';
+
+// Create your own social media application class
+class MySocialApp {
+  private client;
+  private socialContract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.social';
+  
+  constructor(options) {
+    // Use the SDK to create a client
+    this.client = createClient({
+      privateKey: options.privateKey,
+      apiKey: options.apiKey
+    });
+  }
+  
+  // Use the client to implement social features
+  async getProfile(username) {
+    return this.client.call(this.socialContract, 'get-profile', [username]);
+  }
+  
+  async createPost(content) {
+    return this.client.execute(this.socialContract, 'create-post', [content]);
+  }
+}
+```
+
+For a complete implementation, see the [Social Media Example](./examples/social-media.ts).
+
 ## 💡 Advanced Features
 
 ### Intelligent Fallback Chain
@@ -143,7 +262,7 @@ const client = createClient({
   processors: [
     new MemoryCacheProcessor({ ttl: 60 * 1000 }),  // 1 minute cache
     new L2Processor({ url: 'https://l2.example.com' }), 
-    new StacksProcessor({ network: 'mainnet' })
+    new StacksProcessor({ apiKey: 'your-api-key', network: 'mainnet' })
   ]
 });
 
@@ -197,7 +316,7 @@ const intent = client.createIntent({
   type: 'write',
   contract: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
   function: 'transfer',
-  args: [recipient, amount],
+  args: [sender, recipient, amount],
   options: {
     fee: 5000,
     nonce: 12,
@@ -207,9 +326,6 @@ const intent = client.createIntent({
 
 // Sign and submit in one step
 const result = await client.processIntent(intent);
-
-// Or get the serialized transaction
-const tx = await client.buildTransaction(intent);
 ```
 
 ## 📊 Performance Benefits
@@ -230,7 +346,10 @@ Traditional blockchain libraries treat reads and writes differently, leading to 
 - **Enables composition** - Chain together processors for powerful workflows
 - **Optimizes for each operation** - Read intents skip signatures; write intents include them
 
-## 📘 API Reference Highlights
+new CustomL2Service('https://l2.example.com'),
+  apiKey: 'your-api-key'
+});
+```
 
 ### Core Client Methods
 
@@ -240,11 +359,7 @@ Traditional blockchain libraries treat reads and writes differently, leading to 
 - `invalidate(contract, function, args)` - Invalidate specific cache entries
 - `clearCache()` - Clear the entire cache
 
-### Helper Functions
-
-- `createReadOnlyClient(options)` - Create a minimal client for reading only
-- `createLocalClient(options)` - Create a client with local caching and blockchain fallback
-- `createL2Client(options)` - Create a client with L2 service and blockchain fallback
+For more detailed API documentation, see the [TypeScript interfaces](./src/interfaces) and [example applications](./examples).
 
 ## 🤝 Contributing
 
