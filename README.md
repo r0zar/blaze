@@ -7,19 +7,18 @@ A powerful, flexible SDK for seamlessly working with blockchain state through a 
 
 ## 🚀 Overview
 
-This SDK provides a robust solution for managing blockchain state with an intelligent multi-layer caching system. It's designed around a message-centric architecture that handles both read and write operations through a unified interface, allowing developers to:
+Blaze SDK provides a robust solution for managing blockchain state with an intelligent multi-layer caching system. It's designed around a message-centric query/mutate architecture that handles both reading and writing through a unified interface, allowing developers to:
 
 - Read state from multiple sources (memory cache, L2, blockchain)
-- Execute transactions with cryptographic signatures
+- Execute transactions with proper authentication
 - Optimize performance through intelligent caching
 - Fall back gracefully when primary data sources are unavailable
 
 ## ✨ Key Features
 
-- Unified interface for both reads and writes
-- Signature-free reads for better performance
-- Intent-based architecture for clean abstractions
-- Multi-layer processing with intelligent fallbacks
+- Unified interface for both queries and mutations
+- Message-centric design for better abstractions
+- Multi-layer service chain with intelligent fallbacks
 - Automatic cache invalidation on state changes
 - Configurable caching with TTL and capacity controls
 - TypeScript-first with full type safety
@@ -36,64 +35,46 @@ pnpm add blaze-sdk
 
 ## 🚦 Getting Started
 
-### Creating Your First Client
-
-First, import the necessary components and create a client using the core `UnifiedClient` class or the helper function:
+### Creating a Client
 
 ```typescript
-// Using the UnifiedClient class directly
-import { UnifiedClient } from 'blaze-sdk';
+import { Blaze } from 'blaze-sdk';
 
-const client = new UnifiedClient({
-  apiKey: 'your-api-key', 
-  network: 'mainnet'
-});
-
-// Or using a helper function
-import { createClient } from 'blaze-sdk';
-
-const client = createClient({
-  apiKey: 'your-api-key', 
+// Create a simple client with blockchain access
+const client = new Blaze({
+  apiKey: 'your-api-key',
   network: 'mainnet'
 });
 ```
 
-### Reading Blockchain State
-
-The SDK provides a unified interface for reading state from any source (cache, L2, or blockchain):
+### Reading State (Query)
 
 ```typescript
 // Read a token balance
 const balance = await client.call(
-  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
+  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.charisma-contract',
   'get-balance', 
-  ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE']
+  ['SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS']
 );
 
 console.log(`Balance: ${balance}`);
 ```
 
-### Writing to the Blockchain
-
-To perform write operations, include your private key when creating the client:
+### Writing State (Mutate)
 
 ```typescript
-import { UnifiedClient } from 'blaze-sdk';
-
-// Client with write capabilities
-const client = new UnifiedClient({
+// Create a client with write capabilities
+const client = new Blaze({
   privateKey: 'your-private-key',
-  apiKey: 'your-api-key',
-  network: 'mainnet'
+  apiKey: 'your-api-key'
 });
 
-// Transfer tokens
+// Execute a token transfer
 const result = await client.execute(
   'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
   'transfer',
   [
-    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS', // sender
-    'ST3KCNDSWZSFZCC6BE4VA9AXWXC9KEB16FBTRK36T', // recipient
+    'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE', // recipient
     1000, // amount
     'Payment for services' // memo
   ]
@@ -104,262 +85,195 @@ console.log(`Transaction ID: ${result.txId}`);
 
 ## 🏗️ Architecture
 
-The SDK is built around a message-centric architecture with these key components:
+The SDK follows a clear query/mutate pattern with a layered architecture:
 
 ```
-┌─────────┬────────────┬─────────┬────────┐
-│ Intents │ Processors │ Sources │ Clients│
-└─────────┴────────────┴─────────┴────────┘
+┌────────────┐  ┌───────────┐  ┌──────────────┐
+│ Blaze Client │──│ Processor │──│ Service Chain │
+└────────────┘  └───────────┘  └──────────────┘
+                      │
+                      │
+                ┌──────────┐
+                │ MemoryCache │
+                └──────────┘
 ```
 
-- **UnifiedClient** - Entry point that creates intents and manages signing
-- **ChainedProcessor** - Orchestrates multiple processors in a fallback chain
-- **Processors** - Specialized components that process intents from different sources:
-  - **MemoryCacheProcessor** - Ultra-fast in-memory cache
-  - **L2Processor** - Interfaces with off-chain services
-  - **StacksProcessor** - Reads from and writes to the blockchain
+- **Blaze Client**: Main entry point for application developers
+- **Processor**: Orchestrates the service chain and caching
+- **Service Chain**: Ordered list of state providers (L2, blockchain, etc.)
+- **MemoryCache**: Fast in-memory cache for optimal performance
 
-## 🧩 Example Applications
+### Query/Mutate Pattern
 
-The SDK includes example implementations that demonstrate how to build different types of applications. These examples are not part of the core SDK but show how you can create your own application-specific classes using the SDK.
+The SDK organizes all operations into two types:
 
-### DeFi Wallet Example
+- **Queries**: Read-only operations that retrieve state
+- **Mutations**: State-changing operations that require authentication
 
-The SDK includes a `DeFiWallet` implementation in the examples directory that shows how to build a wallet with token management capabilities:
+This pattern provides clear intent separation and optimizes each operation type independently.
+
+## 💡 Advanced Usage
+
+### L2 Integration
+
+Connect to an L2 service for faster responses with blockchain fallback:
 
 ```typescript
-// This example shows how you could build your own DeFi wallet class
-// using the core Blaze SDK components
-import { createClient, createL2Client, L2Service } from 'blaze-sdk';
-
-// Create your own L2 service implementation
-class MyL2Service implements L2Service {
-  // Implement the L2Service interface methods...
-}
-
-// Create a DeFi wallet class
-class MyDeFiWallet {
-  private client;
-  
-  constructor(options) {
-    // Use the SDK to create a client with L2 capabilities
-    this.client = createL2Client({
-      privateKey: options.privateKey,
-      l2Service: new MyL2Service(options.l2Endpoint),
-      apiKey: options.apiKey
-    });
+// Using a URL endpoint for L2
+const client = new Blaze({
+  apiKey: 'your-api-key',
+  privateKey: 'your-private-key', // optional
+  l2: {
+    url: 'https://l2.example.com/api',
+    options: {
+      headers: {
+        'Authorization': 'Bearer token123'
+      }
+    }
   }
-  
-  async getBalance(tokenContract) {
-    // Use the client to call blockchain functions
-    return this.client.call(tokenContract, 'get-balance', [this.client.getAddress()]);
-  }
-  
-  async transfer(tokenContract, recipient, amount, memo) {
-    // Execute a blockchain transaction
-    return this.client.execute(tokenContract, 'transfer', [recipient, amount, memo]);
-  }
-}
-
-// Usage
-const wallet = new MyDeFiWallet({
-  privateKey: 'your-private-key',
-  l2Endpoint: 'https://l2.example.com/api',
-  apiKey: 'your-api-key'
 });
 ```
 
-For a complete implementation, see the [DeFi Wallet Example](./examples/defi-wallet.ts).
+### Custom Services
 
-### NFT Marketplace Example
-
-The SDK includes an example NFT marketplace implementation that shows how to create, list, and buy NFTs:
+Create your own service implementation:
 
 ```typescript
-// Core SDK components you'll use to build an NFT marketplace
-import { createClient, UnifiedClient } from 'blaze-sdk';
+import { createService, Blaze } from 'blaze-sdk';
 
-// Create your own marketplace using the UnifiedClient
-class MyNFTMarketplace {
-  private client: UnifiedClient;
-  private marketplaceContract: string;
+// Create a custom service
+const myService = createService({
+  name: 'my-custom-service',
   
-  constructor(options) {
-    // Create a client using the SDK
-    this.client = createClient({
-      privateKey: options.privateKey,
-      apiKey: options.apiKey
-    });
-    
-    this.marketplaceContract = options.marketplaceContract;
-  }
+  queryFn: async (intent) => {
+    // Custom query logic
+    console.log(`Querying ${intent.contract}.${intent.function}`);
+    return myCustomDataSource.get(intent.contract, intent.function, intent.args);
+  },
   
-  // Implement marketplace functions using the client
-  async getActiveListings(limit = 20) {
-    return this.client.call(
-      this.marketplaceContract,
-      'get-active-listings',
-      [limit]
+  mutateFn: async (intent) => {
+    // Custom mutation logic
+    console.log(`Mutating ${intent.contract}.${intent.function}`);
+    const result = await myCustomDataSource.set(
+      intent.contract,
+      intent.function,
+      intent.args
     );
-  }
+    return { txId: result.transactionId };
+  },
   
-  async createListing(nftContract, tokenId, price, expirationDays) {
-    // Execute the marketplace function
-    return this.client.execute(
-      this.marketplaceContract, 
-      'create-listing',
-      [nftContract, tokenId, price, expirationDays]
-    );
-  }
-}
-```
-
-For a complete implementation, see the [NFT Marketplace Example](./examples/nft-marketplace.ts).
-
-### Social Media Example
-
-The SDK includes an example social media application that shows how to create profiles, posts, and interactions:
-
-```typescript
-// Core SDK components for building a social media application
-import { createClient } from 'blaze-sdk';
-
-// Create your own social media application class
-class MySocialApp {
-  private client;
-  private socialContract = 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.social';
-  
-  constructor(options) {
-    // Use the SDK to create a client
-    this.client = createClient({
-      privateKey: options.privateKey,
-      apiKey: options.apiKey
-    });
-  }
-  
-  // Use the client to implement social features
-  async getProfile(username) {
-    return this.client.call(this.socialContract, 'get-profile', [username]);
-  }
-  
-  async createPost(content) {
-    return this.client.execute(this.socialContract, 'create-post', [content]);
-  }
-}
-```
-
-For a complete implementation, see the [Social Media Example](./examples/social-media.ts).
-
-## 💡 Advanced Features
-
-### Intelligent Fallback Chain
-
-When reading state, the SDK automatically tries each data source in sequence:
-
-```typescript
-// Configure your own processor chain
-const client = createClient({
-  processors: [
-    new MemoryCacheProcessor({ ttl: 60 * 1000 }),  // 1 minute cache
-    new L2Processor({ url: 'https://l2.example.com' }), 
-    new StacksProcessor({ apiKey: 'your-api-key', network: 'mainnet' })
-  ]
+  debug: true
 });
 
-// The client will try each processor in sequence
-const balance = await client.call(
-  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-  'get-balance', 
-  ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE']
-);
+// Use the custom service
+const client = new Blaze({
+  services: [myService],
+  privateKey: 'your-private-key' // optional
+});
+```
+
+### Helper Functions
+
+For common use cases, convenience functions are provided:
+
+```typescript
+import { createReadOnlyClient, createL2Client, createClientWithService } from 'blaze-sdk';
+
+// Read-only client
+const readOnly = createReadOnlyClient({
+  apiKey: 'your-api-key',
+  network: 'mainnet'
+});
+
+// L2 client with blockchain fallback
+const l2Client = createL2Client({
+  l2Url: 'https://l2.example.com/api',
+  apiKey: 'your-api-key',
+  privateKey: 'your-private-key' // optional
+});
+
+// Client with a custom service
+const customClient = createClientWithService({
+  service: myService,
+  apiKey: 'your-api-key',
+  fallbackToBlockchain: true
+});
 ```
 
 ### Cache Control
 
-Fine-grained control over caching behavior:
+Control caching behavior for optimal performance:
 
 ```typescript
-// Configure cache settings
-const client = createClient({
-  cache: {
-    enabled: true,
-    ttl: 30 * 1000,  // 30 seconds default TTL
-    maxSize: 100,    // Maximum entries
-    invalidation: {
-      auto: true,    // Auto-invalidate on state changes
-      patterns: [    // Invalidation patterns
-        {
-          contract: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-          function: 'get-balance',
-          paramMatchers: [(params) => params[0] === myAddress]
-        }
-      ]
-    }
-  }
+// Configure caching
+const client = new Blaze({
+  apiKey: 'your-api-key',
+  cacheTTL: 60 * 1000, // 1 minute cache
+  maxCacheEntries: 500 // limit cache size
 });
 
-// Manually invalidate specific entries
+// Manually invalidate cache entries
 client.invalidate(
   'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
   'get-balance',
   ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE']
 );
+
+// Clear entire cache
+client.clearCache();
+
+// Get cache statistics
+const stats = client.getCacheStats();
+console.log(`Cache size: ${stats.size} entries`);
 ```
 
-### Transaction Building and Signing
+### Direct Intent Creation
 
-Complete control over transaction execution:
+For advanced use cases, create intents directly:
 
 ```typescript
-// Create a write intent
-const intent = client.createIntent({
-  type: 'write',
-  contract: 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
-  function: 'transfer',
-  args: [sender, recipient, amount],
-  options: {
-    fee: 5000,
-    nonce: 12,
-    anchorMode: 'any'
-  }
-});
+// Create a query intent
+const queryIntent = client.createQueryIntent(
+  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
+  'get-balance',
+  ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE']
+);
 
-// Sign and submit in one step
-const result = await client.processIntent(intent);
+// Execute the query intent
+const queryResult = await client.query(queryIntent);
+
+// Create a mutate intent
+const mutateIntent = await client.createMutateIntent(
+  'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.token-contract',
+  'transfer',
+  ['SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE', 1000, 'memo'],
+  { 
+    postConditions: [
+      // Add post conditions here
+    ] 
+  }
+);
+
+// Execute the mutate intent
+const mutateResult = await client.mutate(mutateIntent);
 ```
 
 ## 📊 Performance Benefits
 
 The SDK dramatically improves app performance:
 
-- Up to 300x faster for cached reads compared to direct blockchain calls
-- 80-95% reduction in blockchain API usage through caching
-- Parallel processing of multiple state queries
-- Automatic retries with exponential backoff for reliability
+- **Fast Reads**: Up to 300x faster for cached queries compared to direct blockchain calls
+- **Reduced Load**: 80-95% reduction in blockchain API usage through caching
+- **Parallel Operations**: Process multiple state queries simultaneously
+- **Reliable Fallbacks**: Automatic service switching when primary sources are unavailable
 
-## 🧠 Why Message-Centric Architecture?
+## 📚 Documentation
 
-Traditional blockchain libraries treat reads and writes differently, leading to fragmented codebases. Our message-centric approach:
+For more detailed information, refer to the following documentation:
 
-- **Unifies the interface** - Same pattern for all state operations
-- **Simplifies error handling** - Consistent error patterns across all sources
-- **Enables composition** - Chain together processors for powerful workflows
-- **Optimizes for each operation** - Read intents skip signatures; write intents include them
-
-new CustomL2Service('https://l2.example.com'),
-  apiKey: 'your-api-key'
-});
-```
-
-### Core Client Methods
-
-- `call(contract, function, args)` - Read state from any source
-- `execute(contract, function, args, options)` - Execute a state change with signature
-- `processIntent(intent)` - Process any intent directly
-- `invalidate(contract, function, args)` - Invalidate specific cache entries
-- `clearCache()` - Clear the entire cache
-
-For more detailed API documentation, see the [TypeScript interfaces](./src/interfaces) and [example applications](./examples).
+- [**SERVICES.md**](./SERVICES.md): Detailed explanation of the resolve/mutate pattern and how to implement custom services
+- [**EXAMPLES.md**](./EXAMPLES.md): Complete examples showing token wallets, NFT marketplaces, custom data sources, and advanced intent usage
+- [**SCALING.md**](./SCALING.md): Advanced scaling techniques including specialized off-chain services, batching, and hybrid architecture patterns
 
 ## 🤝 Contributing
 
@@ -368,12 +282,3 @@ Contributions are welcome! See CONTRIBUTING.md for details.
 ## 📝 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgements
-
-This SDK is inspired by best practices from both blockchain and traditional distributed systems designs, bringing together principles from:
-
-- Intent-based programming models
-- Multi-tier caching architectures
-- Message-passing systems
-- Event-driven design patterns

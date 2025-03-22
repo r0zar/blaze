@@ -4,7 +4,12 @@
  */
 import { Client, createClient } from '@stacks/blockchain-api-client';
 import { paths } from '@stacks/blockchain-api-client/lib/generated/schema';
-import { cvToValue, hexToCV } from '@stacks/transactions';
+import {
+  ClarityValue,
+  cvToHex,
+  cvToValue,
+  hexToCV,
+} from '@stacks/transactions';
 
 const API_ENDPOINTS = [
   'https://api.hiro.so/',
@@ -197,7 +202,7 @@ export class StacksClient {
   async callReadOnly(
     contractId: string,
     method: string,
-    args: any[] = [],
+    args: ClarityValue[] = [],
     retries?: number
   ): Promise<any> {
     const maxRetries = retries || StacksClient.options.maxRetries || 3;
@@ -208,7 +213,12 @@ export class StacksClient {
       try {
         const response = await this.getCurrentClient().POST(
           `/v2/contracts/call-read/${address}/${name}/${method}` as any,
-          { body: { sender: address, arguments: args } }
+          {
+            body: {
+              sender: address,
+              arguments: args.map((arg) => cvToHex(arg)),
+            },
+          }
         );
 
         if (!response?.data?.result) {

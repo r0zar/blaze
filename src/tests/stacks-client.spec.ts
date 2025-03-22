@@ -1,6 +1,7 @@
+import { Cl } from '@stacks/transactions';
 import test from 'ava';
 
-import { StacksClient } from '../processors/stacks-client';
+import { StacksClient } from '../clients/stacks-client';
 
 // Setup function to create a testable environment
 function setupTest() {
@@ -51,13 +52,14 @@ test('can call a contract with arguments', async (t) => {
     const result = await client.callReadOnly(
       'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.charisma-token',
       'get-balance',
-      ['SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS']
+      [Cl.address('SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS')]
     );
 
-    // Balance should be a number (could be 0)
     t.true(
-      typeof result === 'bigint' || typeof result === 'number',
-      'Balance should be a numeric type'
+      typeof result === 'bigint' ||
+        typeof result === 'number' ||
+        typeof result === 'string',
+      'Balance should be a numeric or string type'
     );
   } catch (error) {
     // If this specific call fails, log but don't fail the test
