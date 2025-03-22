@@ -93,8 +93,8 @@ export interface BlazeOptions {
  * Unified client for interacting with blockchain state
  */
 export class Blaze {
-  public processor: Processor;
-  public signer?: MessageSigner;
+  processor: Processor;
+  signer?: MessageSigner;
 
   /**
    * Create a new unified client

@@ -37,9 +37,9 @@ interface CacheEntry {
  * Not a service itself, but used by the processor for caching
  */
 export class MemoryCache {
-  public cache: Map<string, CacheEntry>;
-  public options: CacheOptions;
-  public logger: any;
+  cache: Map<string, CacheEntry>;
+  options: CacheOptions;
+  logger: any;
 
   /**
    * Create a new cache
