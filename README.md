@@ -88,20 +88,20 @@ console.log(`Transaction ID: ${result.txId}`);
 The SDK follows a clear query/mutate pattern with a layered architecture:
 
 ```
-┌────────────┐  ┌───────────┐  ┌──────────────┐
-│ Blaze Client │──│ Processor │──│ Service Chain │
-└────────────┘  └───────────┘  └──────────────┘
-                      │
-                      │
-                ┌──────────┐
-                │ MemoryCache │
-                └──────────┘
+┌──────────────┐  ┌──────────────┐  ┌───────────────┐
+│ Blaze Client │──│  Processor   │──│ Service Chain │
+└──────────────┘  └──────────────┘  └───────────────┘
+                         │
+                         │
+                  ┌──────────────┐
+                  │ Memory Cache │
+                  └──────────────┘
 ```
 
 - **Blaze Client**: Main entry point for application developers
 - **Processor**: Orchestrates the service chain and caching
-- **Service Chain**: Ordered list of state providers (L2, blockchain, etc.)
-- **MemoryCache**: Fast in-memory cache for optimal performance
+- **Service Chain**: Ordered list of state providers (L2s, Subnets, Stacks, etc.)
+- **Memory Cache**: Fast in-memory cache for optimal performance
 
 ### Query/Mutate Pattern
 
