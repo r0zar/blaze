@@ -2,19 +2,19 @@ import { StacksClient } from './stacks-client';
 
 export class SignetClient {
   // Base state cache (from blockchain)
-  private baseState: Map<string, Map<string, any>> = new Map();
+  protected baseState: Map<string, Map<string, any>> = new Map();
 
   // Temporary intent queue (cleared on submission)
-  private pendingIntents: Array<{ intent: any; timestamp: number }> = [];
+  protected pendingIntents: Array<{ intent: any; timestamp: number }> = [];
 
   // Track intents by state key
-  private intentsByStateKey: Map<string, Set<number>> = new Map();
+  protected intentsByStateKey: Map<string, Set<number>> = new Map();
 
   // Blockchain client
-  private blockchainClient: StacksClient;
+  protected blockchainClient: StacksClient;
 
   // Batching configuration
-  private batchSize: number;
+  protected batchSize: number;
 
   constructor(options: {
     apiKey: string;

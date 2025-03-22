@@ -83,12 +83,12 @@ const DEFAULT_OPTIONS: StacksClientOptions = {
  * Singleton client for Stacks blockchain interactions with built-in redundancy
  */
 export class StacksClient {
-  private static instance: StacksClient;
-  private static currentKeyIndex = 0;
-  private static currentClientIndex = 0;
-  private static options: StacksClientOptions;
-  private clients: Client<paths, `${string}/${string}`>[];
-  private logger: any;
+  protected static instance: StacksClient;
+  protected static currentKeyIndex = 0;
+  protected static currentClientIndex = 0;
+  protected static options: StacksClientOptions;
+  protected clients: Client<paths, `${string}/${string}`>[];
+  protected logger: any;
 
   /**
    * Private constructor - use getInstance() instead

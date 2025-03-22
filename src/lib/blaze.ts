@@ -93,8 +93,8 @@ export interface BlazeOptions {
  * Unified client for interacting with blockchain state
  */
 export class Blaze {
-  private processor: Processor;
-  private signer?: MessageSigner;
+  protected processor: Processor;
+  protected signer?: MessageSigner;
 
   /**
    * Create a new unified client
@@ -109,11 +109,11 @@ export class Blaze {
     const cache = options.disableCache
       ? undefined
       : new MemoryCache({
-          ttl: options.cacheTTL || 5 * 60 * 1000,
-          maxEntries: options.maxCacheEntries || 1000,
-          debug: options.debug,
-          logger: options.logger,
-        });
+        ttl: options.cacheTTL || 5 * 60 * 1000,
+        maxEntries: options.maxCacheEntries || 1000,
+        debug: options.debug,
+        logger: options.logger,
+      });
 
     // Set up services array
     const services: Service[] = options.services || [];

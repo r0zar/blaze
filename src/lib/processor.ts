@@ -28,10 +28,10 @@ export interface ProcessorOptions extends ServiceOptions {
  * through a chain of services with caching
  */
 export class Processor {
-  private options: ProcessorOptions;
-  private services: Service[];
-  private cache?: MemoryCache;
-  private logger: any;
+  protected options: ProcessorOptions;
+  protected services: Service[];
+  protected cache?: MemoryCache;
+  protected logger: any;
 
   /**
    * Create a new state processor
@@ -99,8 +99,7 @@ export class Processor {
 
         if (this.options.debug) {
           this.logger.warn(
-            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${
-              intent.function
+            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${intent.function
             }: ${error.message}`
           );
         }
@@ -191,8 +190,7 @@ export class Processor {
 
         if (this.options.debug) {
           this.logger.warn(
-            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${
-              intent.function
+            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${intent.function
             }: ${error.message}`
           );
         }

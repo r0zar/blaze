@@ -17,8 +17,8 @@ export interface StructuredMessage {
  */
 export class MessageSigner {
   private privateKey?: string;
-  private address: string;
-  private network: 'mainnet' | 'testnet';
+  protected address: string;
+  protected network: 'mainnet' | 'testnet';
 
   /**
    * Create a new message signer
