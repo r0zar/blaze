@@ -28,10 +28,10 @@ export interface ProcessorOptions extends ServiceOptions {
  * through a chain of services with caching
  */
 export class Processor {
-  protected options: ProcessorOptions;
-  protected services: Service[];
-  protected cache?: MemoryCache;
-  protected logger: any;
+  public options: ProcessorOptions;
+  public services: Service[];
+  public cache?: MemoryCache;
+  public logger: any;
 
   /**
    * Create a new state processor
