@@ -7,6 +7,9 @@ import { Blaze } from './lib/blaze';
 import { Service } from './lib/service';
 import { StacksService } from './services/stacks-service';
 
+// Main client
+export { Blaze } from './lib/blaze';
+
 // Core interfaces
 export {
   QueryIntent,
@@ -16,7 +19,7 @@ export {
 } from './lib/intent';
 
 // Service interface
-export { Service, ServiceOptions } from './lib/service';
+export { Service, ServiceOptions, createService } from './lib/service';
 
 // Cache
 export { MemoryCache, CacheOptions } from './lib/memory-cache';
