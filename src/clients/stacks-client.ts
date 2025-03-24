@@ -5,11 +5,18 @@
 import { Client, createClient } from '@stacks/blockchain-api-client';
 import { paths } from '@stacks/blockchain-api-client/lib/generated/schema';
 import {
+  broadcastTransaction,
   ClarityValue,
   cvToHex,
   cvToValue,
   hexToCV,
+  makeContractCall,
+  PostConditionMode,
+  SignedContractCallOptions,
+  SignedMultiSigContractCallOptions,
 } from '@stacks/transactions';
+
+import { MutateIntent } from '../lib/intent';
 
 const API_ENDPOINTS = [
   'https://api.hiro.so/',
@@ -37,6 +44,11 @@ export interface StacksClientOptions {
    * - "random": Select a random key for each request
    */
   apiKeyRotation?: 'loop' | 'random';
+
+  /**
+   * Private key for server mode
+   */
+  privateKey?: string;
 
   /**
    * Base delay in milliseconds for retry attempts
@@ -72,6 +84,7 @@ const DEFAULT_OPTIONS: StacksClientOptions = {
   apiKey: '',
   apiKeys: [],
   apiKeyRotation: 'loop',
+  privateKey: '',
   network: 'mainnet',
   retryDelay: 1000,
   maxRetries: 3,
@@ -244,6 +257,86 @@ export class StacksClient {
           setTimeout(resolve, attempt * retryDelay)
         );
       }
+    }
+  }
+
+  /**
+   * Call a public function (state-changing) on a smart contract
+   *
+   * @param contractId - Fully qualified contract identifier (address.contract-name)
+   * @param functionName - Name of the function to call
+   * @param args - Array of Clarity values to pass to the function
+   * @param senderAddress - Address of the sender
+   * @param postConditions - Optional post conditions
+   * @param options - Additional options (fee, nonce, etc.)
+   * @returns Transaction ID if successful
+   */
+  async callContractFunction(
+    contractId: string,
+    functionName: string,
+    args: ClarityValue[] = [],
+    options: MutateIntent['options'] = {}
+  ): Promise<string> {
+    try {
+      if (StacksClient.options.debug) {
+        this.logger.debug(`[STACKS CALL] ${contractId}.${functionName}`);
+      }
+
+      // Parse contract ID
+      const [contractAddress, contractName] = contractId.split('.');
+
+      // Check if we're in server mode with a private key
+      if (!StacksClient.options.privateKey) {
+        throw new Error(
+          'Private key is required for contract function calls in server mode'
+        );
+      }
+
+      const transactionOptions:
+        | SignedContractCallOptions
+        | SignedMultiSigContractCallOptions = {
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs: args,
+        senderKey: options.privateKey || StacksClient.options.privateKey,
+        validateWithAbi: true,
+        network: options.network || StacksClient.options.network,
+        postConditions: options.postConditions,
+        postConditionMode: options.postConditionMode || PostConditionMode.Deny,
+        sponsored: options.sponsored,
+      };
+
+      if (options.nonce) {
+        transactionOptions.nonce = options.nonce;
+      }
+
+      if (options.fee) {
+        transactionOptions.fee = options.fee;
+      }
+
+      // Create the transaction
+      const transaction = await makeContractCall(transactionOptions);
+
+      // Broadcast the transaction
+      const broadcastResponse = await broadcastTransaction({ transaction });
+
+      // Check for errors
+      if ('error' in broadcastResponse) {
+        throw new Error(
+          `Failed to broadcast transaction: ${broadcastResponse.error} - ${broadcastResponse.reason}`
+        );
+      }
+
+      // Return transaction ID
+      return broadcastResponse.txid;
+    } catch (error) {
+      if (StacksClient.options.debug) {
+        this.logger.error(
+          `[STACKS ERROR] ${contractId}.${functionName}: ${error.message}`
+        );
+      }
+      throw error;
     }
   }
 }

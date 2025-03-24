@@ -109,11 +109,11 @@ export class Blaze {
     const cache = options.disableCache
       ? undefined
       : new MemoryCache({
-        ttl: options.cacheTTL || 5 * 60 * 1000,
-        maxEntries: options.maxCacheEntries || 1000,
-        debug: options.debug,
-        logger: options.logger,
-      });
+          ttl: options.cacheTTL || 5 * 60 * 1000,
+          maxEntries: options.maxCacheEntries || 1000,
+          debug: options.debug,
+          logger: options.logger,
+        });
 
     // Set up services array
     const services: Service[] = options.services || [];
@@ -179,8 +179,8 @@ export class Blaze {
   async createMutateIntent(
     contract: string,
     fn: string,
-    args: any[],
-    options?: { postConditions?: any[] }
+    args: ClarityValue[],
+    options?: MutateIntent['options']
   ): Promise<MutateIntent> {
     if (!this.signer) {
       throw new Error('Private key is required for mutation operations');
@@ -190,17 +190,18 @@ export class Blaze {
       contract,
       function: fn,
       args,
-      sender: this.signer.getAddress(),
-      timestamp: Date.now(),
-      nonce: await this.getNonce(),
-      postConditions: options?.postConditions || [],
+      options,
     };
   }
 
   /**
    * Call a read-only function (wrapper for better usability)
    */
-  async call(contract: string, fn: string, args: any[] = []): Promise<any> {
+  async call(
+    contract: string,
+    fn: string,
+    args: ClarityValue[] = []
+  ): Promise<any> {
     const intent = this.createQueryIntent(contract, fn, args);
     const result = await this.processor.query(intent);
 
@@ -217,8 +218,8 @@ export class Blaze {
   async execute(
     contract: string,
     fn: string,
-    args: any[] = [],
-    options?: { postConditions?: any[] }
+    args: ClarityValue[] = [],
+    options?: MutateIntent['options']
   ): Promise<MutateResult> {
     if (!this.signer) {
       throw new Error('Private key is required for mutation operations');
@@ -243,18 +244,9 @@ export class Blaze {
   }
 
   /**
-   * Get nonce for transaction
-   */
-  private async getNonce(): Promise<number> {
-    // Simple nonce implementation - in production you'd want to get this from an API
-    // to prevent nonce collisions across multiple instances of the client
-    return Date.now();
-  }
-
-  /**
    * Invalidate cache entry
    */
-  invalidate(contract: string, fn: string, args: any[]): boolean {
+  invalidate(contract: string, fn: string, args: ClarityValue[]): boolean {
     return this.processor.invalidate(contract, fn, args);
   }
 
@@ -275,7 +267,11 @@ export class Blaze {
   /**
    * Legacy method for backward compatibility
    */
-  async resolveState(contract: string, fn: string, args: any[]): Promise<any> {
+  async resolveState(
+    contract: string,
+    fn: string,
+    args: ClarityValue[]
+  ): Promise<any> {
     return this.call(contract, fn, args);
   }
 }
@@ -344,19 +340,12 @@ function createStacksService(options: {
           logger.debug(`[STACKS MUTATE] ${intent.contract}.${intent.function}`);
         }
 
-        if (!intent.sender) {
-          throw new Error('Mutation intents must include sender');
-        }
-
-        // TODO: Implement this
-        // const txId = await client.callContractFunction(
-        //   intent.contract,
-        //   intent.function,
-        //   intent.args,
-        //   intent.sender,
-        //   intent.postConditions || []
-        // );
-        const txId = 'TODO';
+        const txId = await client.callContractFunction(
+          intent.contract,
+          intent.function,
+          intent.args,
+          intent.options
+        );
 
         return {
           status: 'pending',

@@ -2,7 +2,11 @@
  * Core interfaces for message-centric state operations
  */
 
-import { ClarityValue } from '@stacks/transactions';
+import {
+  ClarityValue,
+  PostCondition,
+  PostConditionMode,
+} from '@stacks/transactions';
 
 /**
  * Intent for querying blockchain state (read-only)
@@ -18,10 +22,15 @@ export interface QueryIntent {
  * Requires additional authentication and transaction details
  */
 export interface MutateIntent extends QueryIntent {
-  sender: string;
-  nonce: number;
-  timestamp: number;
-  postConditions?: any[];
+  options: {
+    fee?: number;
+    nonce?: number;
+    network?: 'mainnet' | 'testnet';
+    privateKey?: string;
+    postConditions?: PostCondition[];
+    postConditionMode?: PostConditionMode;
+    sponsored?: boolean;
+  };
 }
 
 /**

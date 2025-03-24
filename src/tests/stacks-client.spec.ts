@@ -3,6 +3,10 @@ import test from 'ava';
 
 import { StacksClient } from '../clients/stacks-client';
 
+// Test private key (don't use this in production!)
+const TEST_PRIVATE_KEY =
+  'e494f188c2d35887531ba474c433b1e41fadd8eb824aca983447fd4bb8b277d801';
+
 // Setup function to create a testable environment
 function setupTest() {
   // Reset the singleton between tests
@@ -14,6 +18,7 @@ function setupTest() {
     apiKeys: ['test-key'],
     debug: false,
     network: 'mainnet',
+    privateKey: TEST_PRIVATE_KEY,
   });
 
   return { client };
@@ -57,8 +62,8 @@ test('can call a contract with arguments', async (t) => {
 
     t.true(
       typeof result === 'bigint' ||
-        typeof result === 'number' ||
-        typeof result === 'string',
+      typeof result === 'number' ||
+      typeof result === 'string',
       'Balance should be a numeric or string type'
     );
   } catch (error) {
@@ -83,4 +88,25 @@ test('handles errors for non-existent contracts', async (t) => {
     },
     { instanceOf: Error }
   );
+});
+
+test.skip('can call a contract function', async (t) => {
+  const { client } = setupTest();
+
+  const result = await client.callContractFunction(
+    'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.charisma-token',
+    'transfer',
+    [
+      Cl.uint(100),
+      Cl.principal('SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS'),
+      Cl.principal('SP2D5BGGJ956A635JG7CJQ59FTRFRB0893514EZPJ'),
+      Cl.none(),
+    ],
+    {
+      fee: 1000,
+    }
+  );
+
+  t.truthy(result, 'Should return a result');
+  t.true(typeof result === 'string', 'Result should be a string');
 });

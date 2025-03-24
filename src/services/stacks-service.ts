@@ -136,18 +136,12 @@ export class StacksService implements Service {
         );
       }
 
-      // Verify this is a properly signed mutation intent
-      if (!intent.sender) {
-        throw new Error('Mutation intents must include sender');
-      }
-
       // Call the contract function
       const txId = await this.client.callContractFunction(
         intent.contract,
         intent.function,
         intent.args,
-        intent.sender,
-        intent.postConditions || []
+        intent.options
       );
 
       return {

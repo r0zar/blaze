@@ -99,7 +99,8 @@ export class Processor {
 
         if (this.options.debug) {
           this.logger.warn(
-            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${intent.function
+            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${
+              intent.function
             }: ${error.message}`
           );
         }
@@ -190,7 +191,8 @@ export class Processor {
 
         if (this.options.debug) {
           this.logger.warn(
-            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${intent.function
+            `[SERVICE ERROR] Service ${i + 1} failed for ${intent.contract}.${
+              intent.function
             }: ${error.message}`
           );
         }
