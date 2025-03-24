@@ -4,7 +4,10 @@
 
 import { ClarityValue } from '@stacks/transactions';
 
-import { StacksClient } from '../clients/stacks-client';
+import {
+  StacksService,
+  StacksServiceOptions,
+} from '../services/stacks-service';
 
 import { MutateIntent, MutateResult, QueryIntent, QueryResult } from './intent';
 import { MemoryCache } from './memory-cache';
@@ -109,11 +112,11 @@ export class Blaze {
     const cache = options.disableCache
       ? undefined
       : new MemoryCache({
-          ttl: options.cacheTTL || 5 * 60 * 1000,
-          maxEntries: options.maxCacheEntries || 1000,
-          debug: options.debug,
-          logger: options.logger,
-        });
+        ttl: options.cacheTTL || 5 * 60 * 1000,
+        maxEntries: options.maxCacheEntries || 1000,
+        debug: options.debug,
+        logger: options.logger,
+      });
 
     // Set up services array
     const services: Service[] = options.services || [];
@@ -279,95 +282,8 @@ export class Blaze {
 /**
  * Create a Stacks blockchain service
  */
-function createStacksService(options: {
-  apiKey?: string;
-  apiKeys?: string[];
-  network?: 'mainnet' | 'testnet';
-  debug?: boolean;
-  logger?: any;
-}): Service {
-  const logger = options.logger || console;
-  const debug = options.debug || false;
-
-  // Get the Stacks client
-  const client = StacksClient.getInstance({
-    apiKey: options.apiKey,
-    apiKeys: options.apiKeys,
-    network: options.network || 'mainnet',
-    debug: options.debug,
-    logger: options.logger,
-  });
-
-  return {
-    name: 'stacks',
-
-    async query(intent: QueryIntent): Promise<QueryResult> {
-      try {
-        if (debug) {
-          logger.debug(`[STACKS QUERY] ${intent.contract}.${intent.function}`);
-        }
-
-        const result = await client.callReadOnly(
-          intent.contract,
-          intent.function,
-          intent.args
-        );
-
-        return {
-          status: 'success',
-          data: result,
-        };
-      } catch (error) {
-        if (debug) {
-          logger.error(
-            `[STACKS ERROR] ${intent.contract}.${intent.function}: ${error.message}`
-          );
-        }
-
-        return {
-          status: 'error',
-          error: {
-            message: `Failed to query ${intent.contract}.${intent.function} on Stacks: ${error.message}`,
-            details: error,
-          },
-        };
-      }
-    },
-
-    async mutate(intent: MutateIntent): Promise<MutateResult> {
-      try {
-        if (debug) {
-          logger.debug(`[STACKS MUTATE] ${intent.contract}.${intent.function}`);
-        }
-
-        const txId = await client.callContractFunction(
-          intent.contract,
-          intent.function,
-          intent.args,
-          intent.options
-        );
-
-        return {
-          status: 'pending',
-          txId,
-        };
-      } catch (error) {
-        if (debug) {
-          logger.error(
-            `[STACKS ERROR] ${intent.contract}.${intent.function}: ${error.message}`
-          );
-        }
-
-        return {
-          status: 'error',
-          error: {
-            message: `Failed to mutate ${intent.contract}.${intent.function} on Stacks: ${error.message}`,
-            details: error,
-          },
-        };
-      }
-    },
-  };
+function createStacksService(options: StacksServiceOptions): Service {
+  return new StacksService(options);
 }
 
 /**

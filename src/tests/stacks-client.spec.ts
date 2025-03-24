@@ -62,8 +62,8 @@ test('can call a contract with arguments', async (t) => {
 
     t.true(
       typeof result === 'bigint' ||
-      typeof result === 'number' ||
-      typeof result === 'string',
+        typeof result === 'number' ||
+        typeof result === 'string',
       'Balance should be a numeric or string type'
     );
   } catch (error) {
