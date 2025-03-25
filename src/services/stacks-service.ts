@@ -165,3 +165,10 @@ export class StacksService implements Service {
     }
   }
 }
+
+/**
+ * Create a Stacks blockchain service (helper function)
+ */
+export function createStacksService(options: StacksServiceOptions): Service {
+  return new StacksService(options);
+}

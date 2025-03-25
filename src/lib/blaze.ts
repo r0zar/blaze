@@ -4,16 +4,13 @@
 
 import { ClarityValue } from '@stacks/transactions';
 
-import {
-  StacksService,
-  StacksServiceOptions,
-} from '../services/stacks-service';
+import { StacksService } from '../services/stacks-service';
 
 import { MutateIntent, MutateResult, QueryIntent, QueryResult } from './intent';
 import { MemoryCache } from './memory-cache';
 import { MessageSigner } from './message-signer';
 import { Processor } from './processor';
-import { Service } from './service';
+import { createL2ServiceFromUrl, Service } from './service';
 /**
  * Options for the unified client
  */
@@ -142,7 +139,7 @@ export class Blaze {
 
       // Always add Stacks service as final layer
       services.push(
-        createStacksService({
+        new StacksService({
           apiKey: options.apiKey,
           apiKeys: options.apiKeys,
           network: options.network || 'mainnet',
@@ -280,122 +277,77 @@ export class Blaze {
 }
 
 /**
- * Create a Stacks blockchain service
+ * Create a read-only client
+ * No private key required, uses only on-chain data
  */
-function createStacksService(options: StacksServiceOptions): Service {
-  return new StacksService(options);
+export function createReadOnlyClient(options: {
+  apiKey?: string;
+  network?: 'mainnet' | 'testnet';
+  debug?: boolean;
+}) {
+  return new Blaze({
+    apiKey: options.apiKey,
+    network: options.network || 'mainnet',
+    debug: options.debug || false,
+    cacheTTL: 60000, // 1 minute cache
+  });
 }
 
 /**
- * Create an L2 service from a URL endpoint
+ * Create an L2 client with fallback to on-chain
  */
-function createL2ServiceFromUrl(
-  url: string,
-  options: {
-    debug?: boolean;
-    logger?: any;
-    headers?: Record<string, string>;
+export function createL2ClientFromUrl(options: {
+  privateKey?: string;
+  l2Url: string;
+  l2Options?: any;
+  apiKey?: string;
+  network?: 'mainnet' | 'testnet';
+  cacheTTL?: number;
+  debug?: boolean;
+}) {
+  return new Blaze({
+    privateKey: options.privateKey,
+    l2: {
+      url: options.l2Url,
+      options: options.l2Options,
+    },
+    apiKey: options.apiKey,
+    network: options.network || 'mainnet',
+    cacheTTL: options.cacheTTL || 300000, // 5 minutes
+    debug: options.debug || false,
+  });
+}
+
+/**
+ * Create a client with a custom service
+ */
+export function createClientWithService(options: {
+  privateKey?: string;
+  service: Service;
+  apiKey?: string;
+  fallbackToBlockchain?: boolean;
+  network?: 'mainnet' | 'testnet';
+  cacheTTL?: number;
+  debug?: boolean;
+}) {
+  // Set up the services array
+  const services: Service[] = [options.service];
+
+  // Add blockchain fallback if requested
+  if (options.fallbackToBlockchain !== false) {
+    services.push(
+      new StacksService({
+        apiKey: options.apiKey,
+        network: options.network || 'mainnet',
+        debug: options.debug,
+      })
+    );
   }
-): Service {
-  const logger = options.logger || console;
-  const debug = options.debug || false;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
 
-  return {
-    name: 'l2',
-
-    async query(intent: QueryIntent): Promise<QueryResult> {
-      try {
-        if (debug) {
-          logger.debug(`[L2 QUERY] ${intent.contract}.${intent.function}`);
-        }
-
-        const response = await fetch(`${url}/query`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            contract: intent.contract,
-            function: intent.function,
-            args: intent.args,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`L2 service error: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        return {
-          status: 'success',
-          data: result,
-        };
-      } catch (error) {
-        if (debug) {
-          logger.warn(
-            `[L2 ERROR] ${intent.contract}.${intent.function}: ${error.message}`
-          );
-        }
-
-        return {
-          status: 'error',
-          error: {
-            message: error.message,
-            details: error,
-          },
-        };
-      }
-    },
-
-    async mutate(intent: MutateIntent): Promise<MutateResult> {
-      try {
-        if (debug) {
-          logger.debug(`[L2 MUTATE] ${intent.contract}.${intent.function}`);
-        }
-
-        const response = await fetch(`${url}/mutate`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(intent),
-        });
-
-        if (!response.ok) {
-          throw new Error(`L2 submission error: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result && result.txId) {
-          return {
-            status: 'pending',
-            txId: result.txId,
-          };
-        }
-
-        return {
-          status: 'error',
-          error: {
-            message: 'L2 service did not return a transaction ID',
-          },
-        };
-      } catch (error) {
-        if (debug) {
-          logger.warn(
-            `[L2 ERROR] ${intent.contract}.${intent.function}: ${error.message}`
-          );
-        }
-
-        return {
-          status: 'error',
-          error: {
-            message: error.message,
-            details: error,
-          },
-        };
-      }
-    },
-  };
+  return new Blaze({
+    privateKey: options.privateKey,
+    services,
+    cacheTTL: options.cacheTTL,
+    debug: options.debug,
+  });
 }

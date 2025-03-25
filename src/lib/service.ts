@@ -70,8 +70,7 @@ export function createService(options: {
       try {
         if (options.debug) {
           logger.debug(
-            `[${options.name.toUpperCase()} QUERY] ${intent.contract}.${
-              intent.function
+            `[${options.name.toUpperCase()} QUERY] ${intent.contract}.${intent.function
             }`
           );
         }
@@ -94,8 +93,7 @@ export function createService(options: {
       } catch (error) {
         if (options.debug) {
           logger.warn(
-            `[${options.name.toUpperCase()} ERROR] ${intent.contract}.${
-              intent.function
+            `[${options.name.toUpperCase()} ERROR] ${intent.contract}.${intent.function
             }: ${error.message}`
           );
         }
@@ -115,8 +113,7 @@ export function createService(options: {
         try {
           if (options.debug) {
             logger.debug(
-              `[${options.name.toUpperCase()} MUTATE] ${intent.contract}.${
-                intent.function
+              `[${options.name.toUpperCase()} MUTATE] ${intent.contract}.${intent.function
               }`
             );
           }
@@ -139,8 +136,7 @@ export function createService(options: {
         } catch (error) {
           if (options.debug) {
             logger.warn(
-              `[${options.name.toUpperCase()} ERROR] ${intent.contract}.${
-                intent.function
+              `[${options.name.toUpperCase()} ERROR] ${intent.contract}.${intent.function
               }: ${error.message}`
             );
           }
@@ -155,5 +151,120 @@ export function createService(options: {
         }
       },
     }),
+  };
+}
+
+
+/**
+ * Create an L2 service from a URL endpoint
+ */
+export function createL2ServiceFromUrl(
+  url: string,
+  options: {
+    debug?: boolean;
+    logger?: any;
+    headers?: Record<string, string>;
+  }
+): Service {
+  const logger = options.logger || console;
+  const debug = options.debug || false;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  return {
+    name: 'l2',
+
+    async query(intent: QueryIntent): Promise<QueryResult> {
+      try {
+        if (debug) {
+          logger.debug(`[L2 QUERY] ${intent.contract}.${intent.function}`);
+        }
+
+        const response = await fetch(`${url}/query`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            contract: intent.contract,
+            function: intent.function,
+            args: intent.args,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`L2 service error: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        return {
+          status: 'success',
+          data: result,
+        };
+      } catch (error) {
+        if (debug) {
+          logger.warn(
+            `[L2 ERROR] ${intent.contract}.${intent.function}: ${error.message}`
+          );
+        }
+
+        return {
+          status: 'error',
+          error: {
+            message: error.message,
+            details: error,
+          },
+        };
+      }
+    },
+
+    async mutate(intent: MutateIntent): Promise<MutateResult> {
+      try {
+        if (debug) {
+          logger.debug(`[L2 MUTATE] ${intent.contract}.${intent.function}`);
+        }
+
+        const response = await fetch(`${url}/mutate`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(intent),
+        });
+
+        if (!response.ok) {
+          throw new Error(`L2 submission error: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result && result.txId) {
+          return {
+            status: 'pending',
+            txId: result.txId,
+          };
+        }
+
+        return {
+          status: 'error',
+          error: {
+            message: 'L2 service did not return a transaction ID',
+          },
+        };
+      } catch (error) {
+        if (debug) {
+          logger.warn(
+            `[L2 ERROR] ${intent.contract}.${intent.function}: ${error.message}`
+          );
+        }
+
+        return {
+          status: 'error',
+          error: {
+            message: error.message,
+            details: error,
+          },
+        };
+      }
+    },
   };
 }
